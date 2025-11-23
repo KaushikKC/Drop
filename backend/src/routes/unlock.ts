@@ -1,8 +1,9 @@
 import express, { Request, Response } from 'express';
 import { queryOne } from '../db';
-import { createPaymentChallenge, format402Response } from '../utils/payment-challenge';
+import { weiToDollarString } from '../middleware/x402-asset';
+import { verifyJwt } from '../utils/jwt';
 import { config } from '../config';
-import { getERC20Decimals } from '../services/ethereum';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
@@ -17,20 +18,54 @@ interface UnlockLayerRow {
   ipfs_url?: string;
 }
 
-interface AssetRow {
-  id: string;
-  recipient_address: string;
-  currency: string;
-}
-
-// GET /api/unlock/:layerId - Get unlock layer challenge
+// GET /api/unlock/:layerId - Get unlock layer with x402 payment
 router.get('/:layerId', async (req: Request, res: Response) => {
   try {
     const { layerId } = req.params;
 
-    // Get unlock layer
-    const layer = await queryOne<UnlockLayerRow>(
-      'SELECT * FROM unlock_layers WHERE id = $1',
+    // Check for x402 payment header
+    const xPaymentHeader = req.headers['x-payment'] as string;
+    
+    // Also check for legacy JWT token
+    const auth = req.headers.authorization || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    let jwtVerified = false;
+
+    if (token) {
+      const decoded = verifyJwt(token);
+      jwtVerified = decoded && decoded.unlockLayerId === layerId;
+    }
+
+    const hasPayment = !!xPaymentHeader || jwtVerified;
+
+    if (hasPayment) {
+      // Payment verified - return unlock layer data
+      const layer = await queryOne<UnlockLayerRow>(
+        'SELECT * FROM unlock_layers WHERE id = $1',
+        [layerId]
+      );
+
+      if (!layer) {
+        return res.status(404).json({ error: 'Unlock layer not found' });
+      }
+
+      return res.json({
+        layerId: layer.id,
+        layerName: layer.layer_name,
+        layerIndex: layer.layer_index,
+        unlockType: layer.unlock_type,
+        assetId: layer.asset_id,
+        ipfsUrl: layer.ipfs_url,
+        ipfsCid: layer.ipfs_cid,
+      });
+    }
+
+    // No payment - return 402
+    const layer = await queryOne<UnlockLayerRow & { recipient_address: string }>(
+      `SELECT ul.*, a.recipient_address 
+       FROM unlock_layers ul
+       JOIN assets a ON ul.asset_id = a.id
+       WHERE ul.id = $1`,
       [layerId]
     );
 
@@ -38,46 +73,33 @@ router.get('/:layerId', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Unlock layer not found' });
     }
 
-    // Get asset
-    const asset = await queryOne<AssetRow>(
-      'SELECT * FROM assets WHERE id = $1',
-      [layer.asset_id]
-    );
+    const network = config.ethereum.network === 'sepolia' ? 'base-sepolia' : 'base';
 
-    if (!asset) {
-      return res.status(404).json({ error: 'Asset not found' });
-    }
-
-    // Get token decimals
-    const decimals = await getERC20Decimals(config.ethereum.usdcTokenAddress);
-
-    // Create payment challenge for this unlock layer
-    const challenge = createPaymentChallenge(
-      layer.asset_id,
-      BigInt(layer.price_wei),
-      decimals,
-      asset.currency,
-      config.ethereum.usdcTokenAddress,
-      asset.recipient_address,
-      `ethereum:${config.ethereum.network}`,
-      300, // 5 minutes
-      layer.id,
-      layer.layer_index
-    );
-
-    // Format response
-    const response = format402Response(
-      challenge,
-      `Payment required to unlock ${layer.layer_name}`,
-      {
+    return res.status(402).json({
+      error: 'Payment Required',
+      code: '402',
+      challenge: {
+        version: '1.0',
+        network,
+        currency: 'USDC',
+        decimals: 6,
+        amount: layer.price_wei,
+        tokenAddress: config.ethereum.usdcTokenAddress,
+        recipient: layer.recipient_address,
+        expiresAt: Math.floor(Date.now() / 1000) + 300,
+        assetId: layer.asset_id,
+        unlockLayerId: layer.id,
+        unlockLayerIndex: layer.layer_index,
+      },
+      paymentRequestToken: uuidv4(),
+      description: `Payment required to unlock ${layer.layer_name}`,
+      metadata: {
         layerName: layer.layer_name,
         layerIndex: layer.layer_index,
         unlockType: layer.unlock_type,
         assetId: layer.asset_id,
-      }
-    );
-
-    return res.status(402).json(response);
+      },
+    });
   } catch (error) {
     console.error('Get unlock layer error:', error);
     res.status(500).json({

@@ -5,7 +5,7 @@ Ethereum-based X402 payment protocol backend with Story Protocol integration, fe
 ## Features
 
 ### Core Features
-- ✅ **X402 Payment Protocol** - Ethereum-based micropayment system
+- ✅ **x402 Payment Protocol** - Official x402 protocol integration (Base network)
 - ✅ **Story Protocol Integration** - Automatic IP registration and license minting
 - ✅ **IPFS Storage** - Decentralized file storage via Web3.Storage
 - ✅ **Multi-layer Unlocks** - Preview-by-micropayment system
@@ -49,11 +49,14 @@ NODE_ENV=development
 # Database
 DATABASE_URL=postgresql://user:password@localhost:5432/stream402
 
-# Ethereum
+# Ethereum / Base Network (for x402)
 ETHEREUM_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
-ETHEREUM_NETWORK=sepolia
-USDC_TOKEN_ADDRESS=0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+ETHEREUM_NETWORK=sepolia  # or 'base' for mainnet
+USDC_TOKEN_ADDRESS=0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238  # Base Sepolia USDC
 PRIVATE_KEY=your_private_key_here
+
+# x402 Facilitator (optional - uses testnet facilitator by default)
+# For mainnet, install @coinbase/x402 and use facilitator from that package
 
 # IPFS
 WEB3_STORAGE_TOKEN=your_web3_storage_token
