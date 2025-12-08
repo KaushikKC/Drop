@@ -1,4 +1,4 @@
-// File: /Users/kaushikk/Documents/hackathons/Surreal World Assets/frontend/app/layout.tsx
+// File: /Users/madhu/Documents/projects/Drop/frontend/app/layout.tsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
