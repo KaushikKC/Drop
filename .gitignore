@@ -1,8 +1,10 @@
 # Ignore everything
 *
 
-# But track the backend folder and its contents
+# But track the backend and api folders and their contents
 !backend/
 !backend/**
+!api/
+!api/**
 !.gitignore
 
