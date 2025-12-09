@@ -46,9 +46,9 @@ export async function GET(
         timestamp: nft.timestamp,
         transactionSignature: nft.transactionSignature,
         explorerUrl: nft.transactionSignature
-          ? `https://explorer.solana.com/tx/${nft.transactionSignature}?cluster=devnet`
+          ? `https://sepolia.basescan.org/tx/${nft.transactionSignature}`
           : null,
-        nftUrl: `https://explorer.solana.com/address/${nft.mint}?cluster=devnet`,
+        nftUrl: `https://sepolia.basescan.org/address/${nft.mint}`,
       })),
     });
   } catch (error) {

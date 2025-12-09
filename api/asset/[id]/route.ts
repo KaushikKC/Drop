@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAsset } from "@/lib/storage";
 import { verifyJwt } from "@/lib/jwt";
-import { solanaConfig } from "@/lib/solana-config";
+// Base network configuration
+const baseConfig = {
+  network: process.env.NEXT_PUBLIC_BASE_NETWORK || "base-sepolia",
+};
 import { v4 as uuidv4 } from "uuid";
 import {
   createPaymentChallenge,
@@ -46,7 +49,7 @@ export async function GET(
     asset.currency,
     asset.mint,
     asset.recipient,
-    `solana:${solanaConfig.network}`,
+    `base-sepolia`,
     paymentRequestToken,
     300 // 5 minutes expiration
   );

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
         success: false,
         message: `No assets found matching "${query}"`,
         suggestions: [
-          "Try searching for: Solana, Bitcoin, Ethereum, logo, image",
+          "Try searching for: Bitcoin, Ethereum, Base, logo, image",
         ],
       });
     }
@@ -61,13 +61,13 @@ export async function POST(request: NextRequest) {
 
     // Asset requires payment - return payment challenge
     const paymentRequestToken = uuidv4();
-    const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || "solana:devnet";
+    const network = process.env.NEXT_PUBLIC_BASE_NETWORK || "base-sepolia";
     const challenge = createPaymentChallenge(
       asset.id,
       asset.price,
       asset.decimals || 6,
       asset.currency || "USDC",
-      asset.mint || process.env.NEXT_PUBLIC_USDC_MINT || "",
+      asset.mint || process.env.NEXT_PUBLIC_USDC_TOKEN_ADDRESS || "",
       asset.recipient,
       network,
       paymentRequestToken,

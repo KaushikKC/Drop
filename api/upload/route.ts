@@ -3,7 +3,12 @@ import { writeFile } from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { saveAsset, UPLOAD_DIR, THUMB_DIR, AssetMetadata } from "@/lib/storage";
-import { solanaConfig } from "@/lib/solana-config";
+// Base network configuration
+const baseConfig = {
+  recipient: process.env.NEXT_PUBLIC_BASE_RECIPIENT || process.env.NEXT_PUBLIC_ETHEREUM_RECIPIENT || "",
+  mint: process.env.NEXT_PUBLIC_USDC_TOKEN_ADDRESS || "",
+  network: process.env.NEXT_PUBLIC_BASE_NETWORK || "base-sepolia",
+};
 import { uploadToIPFS } from "@/lib/ipfs";
 import { generateThumbnail } from "@/lib/thumbnail";
 
@@ -20,7 +25,7 @@ export async function POST(req: NextRequest) {
     const title = (formData.get("title") as string) || "Untitled";
     const price = (formData.get("price") as string) || "0.01";
     const recipient =
-      (formData.get("recipient") as string) || solanaConfig.recipient;
+      (formData.get("recipient") as string) || baseConfig.recipient;
     const tagsInput = (formData.get("tags") as string) || "";
     // Parse tags from comma-separated string
     const tags = tagsInput
@@ -141,7 +146,7 @@ export async function POST(req: NextRequest) {
       price: Number(priceInSmallestUnit),
       decimals: 6,
       currency: "USDC",
-      mint: solanaConfig.mint,
+      mint: baseConfig.mint,
       recipient,
       filename: isServerless ? undefined : filename, // Don't store filename in serverless
       thumbFilename: isServerless ? undefined : thumbFilename, // Don't store thumbFilename in serverless

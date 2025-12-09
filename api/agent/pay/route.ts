@@ -4,20 +4,16 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import {
-  Connection,
-  PublicKey,
-  TransactionMessage,
-  VersionedTransaction,
-} from "@solana/web3.js";
-import {
-  createAssociatedTokenAccountInstruction,
-  createTransferInstruction,
-  getAccount,
-  getAssociatedTokenAddress,
-} from "@solana/spl-token";
+import { ethers } from "ethers";
 import { getAgentWallet, saveAgentWallet } from "@/lib/agent-wallet-storage";
 import { getAgentKeypair } from "@/lib/agent-wallet";
+
+// ERC20 ABI (minimal - just what we need)
+const ERC20_ABI = [
+  'function transfer(address to, uint256 amount) external returns (bool)',
+  'function balanceOf(address account) external view returns (uint256)',
+  'function decimals() external view returns (uint8)',
+];
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,105 +58,66 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
-    const agentPublicKey = agentKeypair.publicKey;
+    const agentPublicKey = agentKeypair.address || agentKeypair.publicKey;
 
-    // Setup connection
-    const connection = new Connection(
-      process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com",
-      "confirmed"
-    );
+    // Setup provider
+    const rpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL || process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL || "https://sepolia.base.org";
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const wallet = new ethers.Wallet(agentKeypair.privateKey, provider);
 
     // Parse payment challenge
-    const mint = new PublicKey(paymentChallenge.mint);
-    const recipient = new PublicKey(paymentChallenge.recipient);
+    const tokenAddress = paymentChallenge.mint || process.env.NEXT_PUBLIC_USDC_TOKEN_ADDRESS || "";
+    const recipient = paymentChallenge.recipient;
     const amountRequired = BigInt(paymentChallenge.amount);
 
-    // Get token accounts
-    const agentAta = await getAssociatedTokenAddress(
-      mint,
-      agentPublicKey,
-      false
-    );
-    const recipientAta = await getAssociatedTokenAddress(
-      mint,
-      recipient,
-      false
-    );
+    if (!tokenAddress) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Token address not configured",
+        },
+        { status: 500 }
+      );
+    }
+
+    // Create token contract instance
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
 
     // Check agent balance
-    let agentAccount;
+    let agentBalance: bigint;
     try {
-      agentAccount = await getAccount(connection, agentAta);
-    } catch {
+      agentBalance = await tokenContract.balanceOf(agentPublicKey);
+    } catch (error) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Agent does not have a token account. Please fund the agent first.",
+            "Failed to check agent balance. Please fund the agent first.",
+          error: error instanceof Error ? error.message : String(error),
         },
         { status: 400 }
       );
     }
 
-    const agentBalance = BigInt(agentAccount.amount.toString());
     if (agentBalance < amountRequired) {
+      const decimals = await tokenContract.decimals();
       return NextResponse.json(
         {
           success: false,
           message: `Insufficient balance. Agent has ${
-            Number(agentBalance) / 1e6
-          } USDC, needs ${Number(amountRequired) / 1e6} USDC`,
+            Number(agentBalance) / (10 ** decimals)
+          } USDC, needs ${Number(amountRequired) / (10 ** decimals)} USDC`,
         },
         { status: 400 }
       );
     }
 
-    // Build transaction
-    const instructions = [];
-
-    // Check if recipient account exists
-    try {
-      await getAccount(connection, recipientAta);
-    } catch {
-      instructions.push(
-        createAssociatedTokenAccountInstruction(
-          agentPublicKey,
-          recipientAta,
-          recipient,
-          mint
-        )
-      );
-    }
-
-    // Add transfer instruction
-    instructions.push(
-      createTransferInstruction(
-        agentAta,
-        recipientAta,
-        agentPublicKey,
-        amountRequired
-      )
-    );
-
-    // Build and sign transaction
-    const { blockhash } = await connection.getLatestBlockhash();
-    const messageV0 = new TransactionMessage({
-      payerKey: agentPublicKey,
-      recentBlockhash: blockhash,
-      instructions,
-    }).compileToV0Message();
-
-    const tx = new VersionedTransaction(messageV0);
-    tx.sign([agentKeypair]);
-
-    // Send transaction
-    const signature = await connection.sendTransaction(tx, {
-      maxRetries: 5,
-      skipPreflight: true,
-    });
-
+    // Build and send transaction
+    const tx = await tokenContract.transfer(recipient, amountRequired);
+    
     // Wait for confirmation
-    await connection.confirmTransaction(signature, "confirmed");
+    const receipt = await tx.wait();
+    const signature = receipt.hash;
 
     // Verify payment and get access token
     const receiptRes = await fetch(`${request.nextUrl.origin}/api/receipt`, {

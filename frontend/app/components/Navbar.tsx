@@ -4,9 +4,15 @@ import { Search, Menu, X, Bell, Wallet } from 'lucide-react';
 import { NavProps } from '../types';
 import { MOCK_CREATOR } from '../constants';
 import Image from 'next/image';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 
-export const TopNav: React.FC<NavProps> = ({ currentView, onChangeView, walletConnected, onConnectWallet }) => {
+export const TopNav: React.FC<Omit<NavProps, 'walletConnected' | 'onConnectWallet'>> = ({ currentView, onChangeView }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { ready, authenticated, login, logout, user } = usePrivy();
+  const { wallets } = useWallets();
+  
+  const walletConnected = ready && authenticated;
+  const walletAddress = wallets[0]?.address;
 
   return (
     <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-4 flex items-center justify-between transition-all duration-300">
@@ -88,8 +94,9 @@ export const TopNav: React.FC<NavProps> = ({ currentView, onChangeView, walletCo
         {/* Wallet / Profile */}
         {!walletConnected ? (
              <button
-                onClick={onConnectWallet}
-                className="bg-[#0F172A] hover:bg-[#0033FF] text-white px-6 py-2.5 rounded-lg text-sm font-bold tracking-wide transition-all duration-300 flex items-center shadow-lg hover:shadow-blue-500/30"
+                onClick={login}
+                disabled={!ready}
+                className="bg-[#0F172A] hover:bg-[#0033FF] text-white px-6 py-2.5 rounded-lg text-sm font-bold tracking-wide transition-all duration-300 flex items-center shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <Wallet className="w-4 h-4 mr-2" />
                 Connect Wallet
@@ -101,8 +108,10 @@ export const TopNav: React.FC<NavProps> = ({ currentView, onChangeView, walletCo
                     className="flex items-center gap-3 hover:opacity-80 transition-opacity"
                  >
                     <div className="text-right hidden sm:block">
-                        <p className="text-sm font-bold text-[#0F172A] leading-none">{MOCK_CREATOR.name}</p>
-                        <p className="text-[11px] text-[#0033FF] font-bold mt-1">42.50 SOL</p>
+                        <p className="text-sm font-bold text-[#0F172A] leading-none">
+                            {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : MOCK_CREATOR.name}
+                        </p>
+                        {/* <p className="text-[11px] text-[#0033FF] font-bold mt-1">EVM Wallet</p> */}
                     </div>
                     <div className="w-10 h-10 rounded-full bg-gray-100 p-0.5 border border-gray-200">
                         <Image src={MOCK_CREATOR.avatar} alt="Profile" width={40} height={40} className="w-full h-full object-cover rounded-full" />

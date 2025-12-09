@@ -56,8 +56,8 @@ export async function POST(req: NextRequest) {
       success: true,
       mint: nftResult.mint,
       signature: nftResult.signature,
-      explorerUrl: `https://explorer.solana.com/tx/${nftResult.signature}?cluster=devnet`,
-      nftUrl: `https://explorer.solana.com/address/${nftResult.mint}?cluster=devnet`,
+      explorerUrl: `https://sepolia.basescan.org/tx/${nftResult.signature}`,
+      nftUrl: `https://sepolia.basescan.org/address/${nftResult.mint}`,
     });
   } catch (error) {
     console.error("Error minting reputation NFT:", error);

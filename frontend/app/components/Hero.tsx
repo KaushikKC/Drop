@@ -112,12 +112,12 @@ export const Hero: React.FC<HeroProps> = ({ onSearch, onExplore }) => {
                         <div className="flex flex-col gap-6 animate-scroll-slow">
                             {HERO_IMAGES.slice(0, 2).map((img, i) => (
                                 <div key={i} className="w-64 h-80 bg-white p-2 rounded-2xl shadow-xl border border-gray-100">
-                                    <img src={img} className="w-full h-full object-cover rounded-xl" />
+                                    <Image alt="Hero Image" src={img} width={256} height={320} className="w-full h-full object-cover rounded-xl" />
                                 </div>
                             ))}
                              {HERO_IMAGES.slice(0, 2).map((img, i) => (
                                 <div key={`dup-${i}`} className="w-64 h-80 bg-white p-2 rounded-2xl shadow-xl border border-gray-100">
-                                    <img src={img} className="w-full h-full object-cover rounded-xl" />
+                                    <Image alt="Hero Image" src={img} width={256} height={320} className="w-full h-full object-cover rounded-xl" />
                                 </div>
                             ))}
                         </div>
@@ -126,7 +126,7 @@ export const Hero: React.FC<HeroProps> = ({ onSearch, onExplore }) => {
                         <div className="flex flex-col gap-6 mt-20 animate-scroll-slow-reverse">
                             {HERO_IMAGES.slice(2, 4).map((img, i) => (
                                 <div key={i} className="w-64 h-80 bg-white p-2 rounded-2xl shadow-xl border border-gray-100">
-                                    <img src={img} className="w-full h-full object-cover rounded-xl" />
+                                    <Image alt="Hero Image" src={img} width={256} height={320} className="w-full h-full object-cover rounded-xl" />
                                 </div>
                             ))}
                              {HERO_IMAGES.slice(2, 4).map((img, i) => (

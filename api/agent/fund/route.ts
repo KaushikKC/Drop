@@ -4,19 +4,15 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import {
-  Connection,
-  PublicKey,
-  TransactionMessage,
-  VersionedTransaction,
-} from "@solana/web3.js";
-import {
-  createAssociatedTokenAccountInstruction,
-  createTransferInstruction,
-  getAccount,
-  getAssociatedTokenAddress,
-} from "@solana/spl-token";
+import { ethers } from "ethers";
 import { getAgentWallet, saveAgentWallet } from "@/lib/agent-wallet-storage";
+
+// ERC20 ABI (minimal - just what we need)
+const ERC20_ABI = [
+  'function transfer(address to, uint256 amount) external returns (bool)',
+  'function balanceOf(address account) external view returns (uint256)',
+  'function decimals() external view returns (uint8)',
+];
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,16 +40,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the transaction was from the correct wallet
-    const connection = new Connection(
-      process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com",
-      "confirmed"
-    );
+    const rpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL || process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL || "https://sepolia.base.org";
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
 
-    const tx = await connection.getTransaction(signature, {
-      maxSupportedTransactionVersion: 0,
-    });
+    const receipt = await provider.getTransactionReceipt(signature);
 
-    if (!tx) {
+    if (!receipt) {
       return NextResponse.json(
         { success: false, message: "Transaction not found" },
         { status: 404 }
@@ -61,26 +53,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify transaction is to the agent wallet
-    const agentPublicKey = new PublicKey(agent.agentAddress);
-    const mint = new PublicKey(
-      process.env.NEXT_PUBLIC_USDC_MINT ||
-        "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
-    );
+    const agentAddress = agent.agentAddress;
+    const tokenAddress = process.env.NEXT_PUBLIC_USDC_TOKEN_ADDRESS || "";
 
-    // Check if transaction transferred tokens to agent
-    const agentAta = await getAssociatedTokenAddress(
-      mint,
-      agentPublicKey,
-      false
-    );
+    if (!tokenAddress) {
+      return NextResponse.json(
+        { success: false, message: "Token address not configured" },
+        { status: 500 }
+      );
+    }
+
+    // Create token contract instance
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
 
     // Get agent's new balance
     let agentBalance = 0n;
     try {
-      const agentAccount = await getAccount(connection, agentAta);
-      agentBalance = BigInt(agentAccount.amount.toString());
+      agentBalance = await tokenContract.balanceOf(agentAddress);
     } catch {
-      // Account doesn't exist yet
+      // Account doesn't exist yet or has no balance
     }
 
     // Update agent balance

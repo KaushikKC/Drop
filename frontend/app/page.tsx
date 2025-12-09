@@ -13,7 +13,6 @@ import { Check } from 'lucide-react';
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('home');
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const [walletConnected, setWalletConnected] = useState(false);
   const [assets, setAssets] = useState<Asset[]>(MOCK_ASSETS);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -40,11 +39,6 @@ const App: React.FC = () => {
     setView('gallery');
   };
 
-  const handleConnectWallet = () => {
-      setWalletConnected(true);
-      triggerToast("Wallet Connected");
-  };
-
   return (
     <div className="min-h-screen bg-[#F9FAFB] text-[#0F172A]">
       
@@ -60,9 +54,7 @@ const App: React.FC = () => {
 
       <TopNav 
         currentView={view} 
-        onChangeView={setView} 
-        walletConnected={walletConnected} 
-        onConnectWallet={handleConnectWallet}
+        onChangeView={setView}
       />
 
       <main>
