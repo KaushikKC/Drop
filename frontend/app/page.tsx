@@ -1,21 +1,121 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TopNav } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { MasonryGrid } from './components/MasonryGrid';
 import { AssetModal } from './components/AssetModal';
-import { UploadFlow } from './upload-flow/page';
-import { Dashboard } from './dashboard/page';
 import { Asset, ViewState } from './types';
-import { MOCK_ASSETS } from './constants';
-import { Check } from 'lucide-react';
+import { getAllAssets, searchAssets } from '@/lib/api-client';
+import { Check, Loader } from 'lucide-react';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('home');
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const [assets, setAssets] = useState<Asset[]>(MOCK_ASSETS);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const router = useRouter();
+
+  // Fetch assets from backend
+  useEffect(() => {
+    const fetchAssets = async () => {
+      try {
+        setLoading(true);
+        const data = await getAllAssets();
+        // Transform backend data to frontend Asset format
+        if (data && Array.isArray(data) && data.length > 0) {
+          // Transform backend assets to frontend format
+          const transformedAssets = data.map((item: any) => {
+            // Convert price_wei (string) to USDC (divide by 1e6 for 6 decimals)
+            let priceInUSDC = 0.01; // Default fallback
+            if (item.price_wei) {
+              const priceWeiNum = typeof item.price_wei === 'string' 
+                ? parseInt(item.price_wei, 10) 
+                : Number(item.price_wei);
+              if (!isNaN(priceWeiNum) && priceWeiNum > 0) {
+                priceInUSDC = priceWeiNum / 1e6; // USDC has 6 decimals
+              }
+            } else if (item.price) {
+              const parsedPrice = parseFloat(item.price);
+              if (!isNaN(parsedPrice) && parsedPrice > 0) {
+                priceInUSDC = parsedPrice;
+              }
+            }
+            
+            const currency = item.currency || 'USDC';
+            // Extract creator address - backend returns it as creator.address or we can use recipient_address
+            const creatorAddress = item.creator?.address || 
+                                  item.creator_address || 
+                                  item.creator?.recipient ||
+                                  item.recipient_address || 
+                                  item.recipient || 
+                                  'default';
+            
+            // Generate avatar URL - use creator address as seed for consistent avatar
+            const avatarSeed = creatorAddress && creatorAddress !== 'unknown' && creatorAddress !== 'default' 
+              ? creatorAddress 
+              : `asset-${item.id || 'default'}`;
+            const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(avatarSeed)}`;
+            
+            return {
+              id: item.id || item.assetId,
+              title: item.title || 'Untitled',
+              creator: {
+                id: creatorAddress,
+                name: item.creator?.name || '',
+                avatar: avatarUrl,
+                wallet: creatorAddress !== 'default' ? creatorAddress : (item.recipient || item.recipient_address || '0x...'),
+              },
+              // Use preview URL (watermarked) for gallery, full quality after payment
+              imageUrl: item.previewUrl || item.thumbnailUrl || item.thumbnail_ipfs_url || item.thumbnail_url || '',
+              previewUrl: item.previewUrl || item.thumbnailUrl || item.thumbnail_ipfs_url || '',
+              fullQualityUrl: item.ipfsUrl || item.ipfs_url || '', // Full quality (only after payment)
+              width: item.width || 800,
+              height: item.height || 600,
+              mimeType: item.file_type || item.fileType || item.mimeType || 'image/jpeg',
+              cid: item.ipfsCid || item.ipfs_cid || '',
+              ipId: item.storyIPId || item.story_ip_id || '',
+              fingerprint: item.fingerprint || item.perceptual_hash || '',
+              hash: item.hash || '',
+              authScore: 0.95,
+              tags: item.tags || [],
+              likes: 0,
+              views: 0,
+              priceTiers: [
+                {
+                  tier: 'preview' as const,
+                  label: 'Personal Use',
+                  price: priceInUSDC || 0.01,
+                  currency: currency,
+                  features: ['4K Resolution', 'No watermark', 'Personal Use']
+                }
+              ],
+              createdAt: item.created_at || item.createdAt || new Date().toISOString()
+            };
+          });
+          setAssets(transformedAssets);
+        } else {
+          // No assets found - show empty state
+          setAssets([]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch assets:', error);
+        // Set empty array on error - don't break the UI
+        setAssets([]);
+        // Optionally show error toast
+        if (error instanceof Error) {
+          console.error('Error details:', error.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAssets();
+  }, []);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -36,7 +136,7 @@ const App: React.FC = () => {
 
   const handleUploadComplete = () => {
     triggerToast("IP Registered Successfully");
-    setView('gallery');
+    router.push('/dashboard');
   };
 
   return (
@@ -54,15 +154,20 @@ const App: React.FC = () => {
 
       <TopNav 
         currentView={view} 
-        onChangeView={setView}
+        onChangeView={(v) => {
+          setView(v);
+          if (v === 'upload') router.push('/upload-flow');
+          else if (v === 'dashboard') router.push('/dashboard');
+          else if (v === 'home') router.push('/');
+        }}
       />
 
       <main>
         {view === 'home' && (
           <>
             <Hero 
-                onSearch={(term) => { console.log(term); setView('gallery'); }}
-                onExplore={() => setView('gallery')}
+                onSearch={(term) => { console.log(term); router.push('/dashboard'); }}
+                onExplore={() => router.push('/dashboard')}
             />
             <div className="border-t border-gray-100 bg-white">
                 <div className="max-w-[1800px] mx-auto px-6 py-12">
@@ -70,28 +175,18 @@ const App: React.FC = () => {
                         <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Trending Now</h2>
                         <div className="h-px bg-gray-100 flex-1"></div>
                     </div>
-                    <MasonryGrid assets={assets.slice(0, 10)} onAssetClick={handleAssetClick} />
+                    {loading ? (
+                        <div className="flex items-center justify-center py-20">
+                            <Loader className="w-8 h-8 animate-spin text-[#0033FF]" />
+                        </div>
+                    ) : (
+                        <MasonryGrid assets={assets.slice(0, 10)} onAssetClick={handleAssetClick} />
+                    )}
                 </div>
             </div>
           </>
         )}
 
-        {view === 'gallery' && (
-          <div className="animate-in fade-in duration-500">
-             <div className="sticky top-[73px] z-40 bg-white/80 backdrop-blur-md border-b border-gray-200 py-4 px-8 flex justify-between items-center">
-                <h1 className="text-xl font-black tracking-tight text-[#0F172A]">EXPLORE</h1>
-                <div className="flex gap-4">
-                    <button className="text-xs font-bold text-[#0033FF] bg-blue-50 px-3 py-1 rounded-full">All Assets</button>
-                    <button className="text-xs font-bold text-gray-500 hover:text-black transition-colors px-3 py-1">Newest</button>
-                </div>
-             </div>
-             <MasonryGrid assets={assets} onAssetClick={handleAssetClick} />
-          </div>
-        )}
-
-        {view === 'upload' && <UploadFlow onComplete={handleUploadComplete} />}
-
-        {view === 'dashboard' && <Dashboard />}
       </main>
 
       {selectedAsset && (

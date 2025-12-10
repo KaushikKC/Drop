@@ -1,5 +1,10 @@
--- Stream402 Database Schema
+-- drop Database Schema
 -- Supports Ethereum payments, Story Protocol integration, and agent features
+
+-- Enable UUID extension (required for gen_random_uuid())
+-- Note: This requires superuser privileges. If you get permission denied, run as postgres user:
+-- psql -U postgres -d drop -c 'CREATE EXTENSION IF NOT EXISTS "pgcrypto";'
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Assets table
 CREATE TABLE IF NOT EXISTS assets (
@@ -136,6 +141,33 @@ CREATE TABLE IF NOT EXISTS reputation_scores (
     UNIQUE(address)
 );
 
+-- Payment challenges table (for X402 flow)
+CREATE TABLE IF NOT EXISTS payment_challenges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_id VARCHAR(66) NOT NULL UNIQUE, -- keccak256 hash
+    asset_id UUID NOT NULL REFERENCES assets(id),
+    unlock_layer_id UUID REFERENCES unlock_layers(id),
+    amount_wei BIGINT NOT NULL,
+    token_address VARCHAR(42) NOT NULL,
+    recipient VARCHAR(42) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    payment_request_token VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User purchases table (for tracking unlocked assets)
+CREATE TABLE IF NOT EXISTS user_purchases (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_address VARCHAR(42) NOT NULL,
+    asset_id UUID NOT NULL REFERENCES assets(id),
+    transaction_hash VARCHAR(66) NOT NULL,
+    payment_id VARCHAR(66) REFERENCES payment_challenges(payment_id),
+    access_token TEXT,
+    license_type VARCHAR(50),
+    purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_address, asset_id, transaction_hash)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_assets_creator ON assets(creator_address);
 CREATE INDEX IF NOT EXISTS idx_assets_recipient ON assets(recipient_address);
@@ -151,4 +183,8 @@ CREATE INDEX IF NOT EXISTS idx_negotiations_agent ON negotiations(agent_address)
 CREATE INDEX IF NOT EXISTS idx_negotiations_status ON negotiations(status);
 CREATE INDEX IF NOT EXISTS idx_derived_works_parent ON derived_works(parent_asset_id);
 CREATE INDEX IF NOT EXISTS idx_derived_works_derived ON derived_works(derived_asset_id);
+CREATE INDEX IF NOT EXISTS idx_payment_challenges_asset ON payment_challenges(asset_id);
+CREATE INDEX IF NOT EXISTS idx_payment_challenges_payment_id ON payment_challenges(payment_id);
+CREATE INDEX IF NOT EXISTS idx_user_purchases_user ON user_purchases(user_address);
+CREATE INDEX IF NOT EXISTS idx_user_purchases_asset ON user_purchases(asset_id);
 

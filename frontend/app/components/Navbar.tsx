@@ -2,28 +2,30 @@
 import React, { useState } from 'react';
 import { Search, Menu, X, Bell, Wallet } from 'lucide-react';
 import { NavProps } from '../types';
-import { MOCK_CREATOR } from '../constants';
 import Image from 'next/image';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useRouter, usePathname } from 'next/navigation';
 
 export const TopNav: React.FC<Omit<NavProps, 'walletConnected' | 'onConnectWallet'>> = ({ currentView, onChangeView }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { ready, authenticated, login, logout, user } = usePrivy();
+  const { authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
+  const router = useRouter();
+  const pathname = usePathname();
   
-  const walletConnected = ready && authenticated;
+  const walletConnected = authenticated;
   const walletAddress = wallets[0]?.address;
 
   return (
     <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-4 flex items-center justify-between transition-all duration-300">
       
-      {/* Left: Branding */}
-      <div className="flex items-center gap-10">
-        {/* Custom Drop Logo - Hollow Drop (Border Only) + Filled Inner Circle */}
-        <div 
-          className="cursor-pointer group flex items-center gap-3" 
-          onClick={() => onChangeView('home')}
-        >
+        {/* Left: Branding */}
+        <div className="flex items-center gap-10">
+          {/* Custom Drop Logo - Hollow Drop (Border Only) + Filled Inner Circle */}
+          <div 
+            className="cursor-pointer group flex items-center gap-3" 
+            onClick={() => router.push('/')}
+          >
             <div className="relative w-8 h-8 flex items-center justify-center transition-transform duration-300 ">
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     {/* Outline Water Drop - Black Border */}
@@ -44,25 +46,39 @@ export const TopNav: React.FC<Omit<NavProps, 'walletConnected' | 'onConnectWalle
 
         {/* Desktop Nav Links */}
         <div className="hidden md:flex items-center gap-8">
-            {['Home', 'Explore', 'Create'].map((item) => {
-                const viewKey = item.toLowerCase() === 'explore' ? 'gallery' : item.toLowerCase() === 'create' ? 'upload' : 'home';
-                const isActive = currentView === viewKey;
-                
-                return (
-                    <button 
-                        key={item}
-                        onClick={() => onChangeView(viewKey as any)}
-                        className={`text-sm font-bold uppercase tracking-wider transition-all duration-200 relative ${
-                            isActive 
-                            ? 'text-[#0033FF]' 
-                            : 'text-gray-500 hover:text-[#0F172A]'
-                        }`}
-                    >
-                        {item}
-                        {isActive && <span className="absolute -bottom-6 left-0 w-full h-0.5 bg-[#0033FF]"></span>}
-                    </button>
-                );
-            })}
+            <button 
+                onClick={() => router.push('/')}
+                className={`text-sm font-bold uppercase tracking-wider transition-all duration-200 relative ${
+                    pathname === '/' 
+                    ? 'text-[#0033FF]' 
+                    : 'text-gray-500 hover:text-[#0F172A]'
+                }`}
+            >
+                Home
+                {pathname === '/' && <span className="absolute -bottom-6 left-0 w-full h-0.5 bg-[#0033FF]"></span>}
+            </button>
+            <button 
+                onClick={() => router.push('/dashboard')}
+                className={`text-sm font-bold uppercase tracking-wider transition-all duration-200 relative ${
+                    pathname === '/dashboard' 
+                    ? 'text-[#0033FF]' 
+                    : 'text-gray-500 hover:text-[#0F172A]'
+                }`}
+            >
+                Explore
+                {pathname === '/dashboard' && <span className="absolute -bottom-6 left-0 w-full h-0.5 bg-[#0033FF]"></span>}
+            </button>
+            <button 
+                onClick={() => router.push('/upload-flow')}
+                className={`text-sm font-bold uppercase tracking-wider transition-all duration-200 relative ${
+                    pathname === '/upload-flow' 
+                    ? 'text-[#0033FF]' 
+                    : 'text-gray-500 hover:text-[#0F172A]'
+                }`}
+            >
+                Create
+                {pathname === '/upload-flow' && <span className="absolute -bottom-6 left-0 w-full h-0.5 bg-[#0033FF]"></span>}
+            </button>
         </div>
       </div>
 
@@ -95,7 +111,6 @@ export const TopNav: React.FC<Omit<NavProps, 'walletConnected' | 'onConnectWalle
         {!walletConnected ? (
              <button
                 onClick={login}
-                disabled={!ready}
                 className="bg-[#0F172A] hover:bg-[#0033FF] text-white px-6 py-2.5 rounded-lg text-sm font-bold tracking-wide transition-all duration-300 flex items-center shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <Wallet className="w-4 h-4 mr-2" />
@@ -104,18 +119,24 @@ export const TopNav: React.FC<Omit<NavProps, 'walletConnected' | 'onConnectWalle
         ) : (
             <div className="flex items-center pl-6 border-l border-gray-200">
                  <button 
-                    onClick={() => onChangeView('dashboard')}
+                    onClick={() => router.push('/dashboard')}
                     className="flex items-center gap-3 hover:opacity-80 transition-opacity"
                  >
                     <div className="text-right hidden sm:block">
                         <p className="text-sm font-bold text-[#0F172A] leading-none">
-                            {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : MOCK_CREATOR.name}
+                            {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Wallet'}
                         </p>
                         {/* <p className="text-[11px] text-[#0033FF] font-bold mt-1">EVM Wallet</p> */}
                     </div>
-                    <div className="w-10 h-10 rounded-full bg-gray-100 p-0.5 border border-gray-200">
-                        <Image src={MOCK_CREATOR.avatar} alt="Profile" width={40} height={40} className="w-full h-full object-cover rounded-full" />
-                    </div>
+                    {/* <div className="w-10 h-10 rounded-full bg-gray-100 p-0.5 border border-gray-200">
+                        <Image 
+                            src={walletAddress ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${walletAddress}` : '/avatar.png'} 
+                            alt={walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Profile'} 
+                            width={40} 
+                            height={40} 
+                            className="w-full h-full object-cover rounded-full" 
+                        />
+                    </div> */}
                  </button>
             </div>
         )}
@@ -132,10 +153,10 @@ export const TopNav: React.FC<Omit<NavProps, 'walletConnected' | 'onConnectWalle
       {/* Mobile Menu Dropdown */}
       {isMobileMenuOpen && (
         <div className="absolute top-[73px] left-0 right-0 bg-white border-b border-gray-200 md:hidden flex flex-col p-6 animate-in slide-in-from-top-2 shadow-xl">
-            <button onClick={() => { onChangeView('home'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Home</button>
-            <button onClick={() => { onChangeView('gallery'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Explore</button>
-            <button onClick={() => { onChangeView('upload'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Create</button>
-            <button onClick={() => { onChangeView('dashboard'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Dashboard</button>
+            <button onClick={() => { router.push('/'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Home</button>
+            <button onClick={() => { router.push('/dashboard'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Explore</button>
+            <button onClick={() => { router.push('/upload-flow'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Create</button>
+            <button onClick={() => { router.push('/dashboard'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Dashboard</button>
         </div>
       )}
     </nav>

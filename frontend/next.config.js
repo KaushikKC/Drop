@@ -15,8 +15,36 @@ const nextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'gateway.pinata.cloud',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'ipfs.io',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.ipfs.w3s.link',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'api.dicebear.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
+    unoptimized: false, // Enable image optimization
   },
+
+
+  // Keep webpack config for backward compatibility (when using --webpack flag)
   webpack: (config, { isServer }) => {
     // Exclude Solana modules from bundling
     config.resolve.alias = {

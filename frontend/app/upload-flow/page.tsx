@@ -1,17 +1,29 @@
 'use client';
 import React, { useState } from 'react';
-import { Upload, X, Check, Zap, Scan } from 'lucide-react';
+import { Upload, X, Check, Zap, Scan, AlertCircle } from 'lucide-react';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { uploadAsset } from '@/lib/api-client';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { TopNav } from '../components/Navbar';
 
 interface UploadFlowProps {
-    onComplete: () => void;
+    onComplete?: () => void;
 }
 
 export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
+    const { ready, authenticated } = usePrivy();
+    const { wallets } = useWallets();
+    const router = useRouter();
     const [file, setFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(null);
     const [scanning, setScanning] = useState(false);
     const [scanComplete, setScanComplete] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
+    const [price, setPrice] = useState('0.01');
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) processFile(e.target.files[0]);
@@ -21,16 +33,58 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
         setFile(f);
         setPreview(URL.createObjectURL(f));
         setTitle(f.name.split('.')[0]);
+        setError(null);
         setScanning(true);
+        // Simulate hash generation
         setTimeout(() => {
             setScanning(false);
             setScanComplete(true);
         }, 2500);
     }
 
+    const handlePublish = async () => {
+        if (!file || !title.trim()) {
+            setError('Please provide a title');
+            return;
+        }
+
+        if (!authenticated || !wallets[0]) {
+            setError('Please connect your wallet first');
+            return;
+        }
+
+        setUploading(true);
+        setError(null);
+
+        try {
+            const walletAddress = wallets[0].address;
+            const result = await uploadAsset(file, {
+                title: title.trim(),
+                description: description.trim(),
+                price: parseFloat(price) || 0.01,
+                recipient: walletAddress,
+                tags: [], // Can add tag input later
+            });
+
+            console.log('Upload successful:', result);
+            if (onComplete) {
+                onComplete();
+            } else {
+                router.push('/dashboard');
+            }
+        } catch (err: any) {
+            console.error('Upload error:', err);
+            setError(err.message || 'Upload failed. Please try again.');
+        } finally {
+            setUploading(false);
+        }
+    }
+
     if (!file) {
         return (
-            <div className="min-h-[calc(100vh-80px)] flex items-center justify-center p-6 bg-[#F9FAFB]">
+            <div className="min-h-screen bg-[#F9FAFB]">
+                <TopNav currentView="upload" onChangeView={() => {}} />
+                <div className="min-h-[calc(100vh-80px)] flex items-center justify-center p-6">
                 <div className="w-full max-w-3xl h-[400px] border-2 border-dashed border-gray-300 hover:border-[#0033FF] rounded-3xl bg-white flex flex-col items-center justify-center relative transition-all group cursor-pointer hover:shadow-2xl hover:bg-blue-50/10">
                     <input type="file" className="absolute inset-0 opacity-0 z-10 cursor-pointer" onChange={handleFileChange} />
                     
@@ -40,12 +94,15 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
                     <h2 className="text-2xl font-black text-[#0F172A] mb-2">Upload Asset</h2>
                     <p className="text-gray-500 font-medium">Drag & drop or click to browse</p>
                 </div>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="fixed inset-0 z-50 bg-[#F9FAFB] flex flex-col">
+        <div className="min-h-screen bg-[#F9FAFB] flex flex-col">
+            <TopNav currentView="upload" onChangeView={() => {}} />
+            <div className="flex-1 flex flex-col overflow-hidden">
             {/* Header */}
             <div className="h-16 border-b border-gray-200 flex items-center justify-between px-8 bg-white">
                  <div className="flex items-center gap-4">
@@ -55,15 +112,15 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
                     <span className="font-bold text-sm text-[#0033FF] bg-blue-50 px-3 py-1 rounded-full uppercase tracking-wider">Studio</span>
                  </div>
                  <button 
-                    onClick={onComplete}
-                    disabled={!scanComplete}
+                    onClick={handlePublish}
+                    disabled={!scanComplete || uploading || !authenticated}
                     className={`px-8 py-2.5 rounded-lg font-bold text-sm uppercase tracking-wide transition-all shadow-lg ${
-                        scanComplete 
+                        scanComplete && authenticated && !uploading
                         ? 'bg-[#0033FF] text-white hover:bg-blue-700 hover:shadow-blue-500/30' 
                         : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
                     }`}
                  >
-                    {scanComplete ? 'Publish IP' : 'Analyzing...'}
+                    {uploading ? 'Uploading...' : scanComplete ? 'Publish IP' : 'Analyzing...'}
                  </button>
             </div>
 
@@ -71,7 +128,7 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
                 {/* Preview Canvas */}
                 <div className="flex-1 bg-gray-50 relative flex items-center justify-center p-12">
                     <div className="relative shadow-2xl rounded-lg p-2 bg-white">
-                        <img src={preview!} className="max-h-[60vh] max-w-full opacity-100 rounded" />
+                        <Image src={preview!} alt={title || 'Preview'} className="max-h-[60vh] max-w-full opacity-100 rounded" width={1000} height={1000} />
                         
                         {/* Scanning Effect */}
                         {scanning && (
@@ -107,6 +164,14 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
                             </div>
                         </div>
 
+                        {/* Error Message */}
+                        {error && (
+                            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+                                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                                <p className="text-sm text-red-700 font-medium">{error}</p>
+                            </div>
+                        )}
+
                         {/* Inputs */}
                         <div className="space-y-4">
                             <div>
@@ -115,7 +180,33 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
                                     type="text" 
                                     value={title}
                                     onChange={(e) => setTitle(e.target.value)}
-                                    className="w-full bg-white border border-gray-200 rounded-lg p-3 text-[#0F172A] font-bold focus:border-[#0033FF] focus:ring-1 focus:ring-[#0033FF] outline-none transition-all"
+                                    disabled={uploading}
+                                    className="w-full bg-white border border-gray-200 rounded-lg p-3 text-[#0F172A] font-bold focus:border-[#0033FF] focus:ring-1 focus:ring-[#0033FF] outline-none transition-all disabled:opacity-50"
+                                    placeholder="Enter asset title"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Description</label>
+                                <textarea 
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    disabled={uploading}
+                                    rows={3}
+                                    className="w-full bg-white border border-gray-200 rounded-lg p-3 text-[#0F172A] font-medium focus:border-[#0033FF] focus:ring-1 focus:ring-[#0033FF] outline-none transition-all disabled:opacity-50 resize-none"
+                                    placeholder="Describe your asset..."
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Price (USDC)</label>
+                                <input 
+                                    type="number" 
+                                    step="0.01"
+                                    min="0.01"
+                                    value={price}
+                                    onChange={(e) => setPrice(e.target.value)}
+                                    disabled={uploading}
+                                    className="w-full bg-white border border-gray-200 rounded-lg p-3 text-[#0F172A] font-bold focus:border-[#0033FF] focus:ring-1 focus:ring-[#0033FF] outline-none transition-all disabled:opacity-50"
+                                    placeholder="0.01"
                                 />
                             </div>
                         </div>
@@ -144,6 +235,9 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
             </div>
 
          
+            </div>
         </div>
     );
 };
+
+export default UploadFlow;

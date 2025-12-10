@@ -1,7 +1,12 @@
 'use client';
-import React, { useState } from 'react';
-import { X, Share2, Shield, Heart, Check, Box, Cpu, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Share2, Shield, Heart, Check, Box, Cpu, Download, AlertCircle, Loader } from 'lucide-react';
 import { Asset, PriceTier } from '../types';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { getAsset, verifyPayment } from '@/lib/api-client';
+import { payAndVerify } from '@/lib/payment';
+import { ethers } from 'ethers';
+import Image from 'next/image';
 
 interface AssetModalProps {
     asset: Asset;
@@ -10,15 +15,128 @@ interface AssetModalProps {
 }
 
 export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurchase }) => {
+    const { authenticated } = usePrivy();
+    const { wallets } = useWallets();
     const [activeTab, setActiveTab] = useState<'details' | 'license'>('details');
     const [purchasing, setPurchasing] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [hasAccess, setHasAccess] = useState(false);
+    const [accessToken, setAccessToken] = useState<string | null>(null);
+    const [paymentChallenge, setPaymentChallenge] = useState<any>(null);
 
-    const handleBuy = (tier: PriceTier) => {
+    // Check if user has access when modal opens
+    useEffect(() => {
+        const checkAccess = async () => {
+            const storedToken = localStorage.getItem(`access_token_${asset.id}`);
+            if (storedToken) {
+                try {
+                    const result = await getAsset(asset.id, storedToken);
+                    if (!result.requiresPayment) {
+                        setHasAccess(true);
+                        setAccessToken(storedToken);
+                    } else {
+                        localStorage.removeItem(`access_token_${asset.id}`);
+                    }
+                } catch (err) {
+                    localStorage.removeItem(`access_token_${asset.id}`);
+                }
+            } else {
+                // Fetch payment challenge
+                try {
+                    const result = await getAsset(asset.id);
+                    if (result.requiresPayment) {
+                        // The challenge is nested: result.challenge contains the challenge object
+                        const challenge = result.challenge;
+                        if (challenge && challenge.amount) {
+                            // Ensure amount is a string for BigInt conversion
+                            // Backend returns amount as price_wei (string or number)
+                            const amountValue = challenge.amount?.toString() || '';
+                            if (!amountValue || amountValue === 'undefined' || amountValue === 'null') {
+                                setError('Invalid payment challenge: amount is missing');
+                                return;
+                            }
+                            
+                            const normalizedChallenge = {
+                                ...challenge,
+                                amount: amountValue,
+                                tokenAddress: challenge.tokenAddress || undefined,
+                                recipient: challenge.recipient || '',
+                                paymentRequestToken: challenge.paymentRequestToken || '',
+                            };
+                            setPaymentChallenge(normalizedChallenge);
+                        } else {
+                            setError('Invalid payment challenge received: missing amount or recipient');
+                        }
+                    } else {
+                        setHasAccess(true);
+                    }
+                } catch (err: any) {
+                    setError(err.message || 'Failed to load asset');
+                }
+            }
+        };
+        checkAccess();
+    }, [asset.id]);
+
+    const handleBuy = async (tier: PriceTier) => {
+        if (!authenticated || !wallets[0]) {
+            setError('Please connect your wallet first');
+            return;
+        }
+
+        if (!paymentChallenge) {
+            setError('Payment challenge not available');
+            return;
+        }
+
         setPurchasing(true);
-        setTimeout(() => {
-            setPurchasing(false);
+        setError(null);
+
+        try {
+            // Get signer from Privy wallet
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+
+            // Ensure challenge has required fields
+            if (!paymentChallenge?.amount || !paymentChallenge?.recipient) {
+                throw new Error('Invalid payment challenge: missing amount or recipient');
+            }
+
+            // Ensure amount is a valid string (not undefined)
+            const amountStr = paymentChallenge.amount?.toString();
+            if (!amountStr || amountStr === 'undefined' || amountStr === 'null') {
+                throw new Error('Invalid payment challenge: amount is invalid');
+            }
+
+            // Get paymentRequestToken from challenge
+            const paymentRequestToken = paymentChallenge.paymentRequestToken || '';
+
+            // Make payment and verify
+            const result = await payAndVerify(
+                {
+                    tokenAddress: paymentChallenge.tokenAddress,
+                    recipient: paymentChallenge.recipient,
+                    amount: amountStr, // Already validated as string
+                    paymentRequestToken: paymentRequestToken,
+                    expiresAt: paymentChallenge.expiresAt,
+                },
+                signer,
+                paymentRequestToken,
+                asset.id
+            );
+
+            // Save access token
+            localStorage.setItem(`access_token_${asset.id}`, result.accessToken);
+            setAccessToken(result.accessToken);
+            setHasAccess(true);
             onPurchase(tier);
-        }, 1500);
+        } catch (err: any) {
+            console.error('Payment error:', err);
+            setError(err.message || 'Payment failed. Please try again.');
+        } finally {
+            setPurchasing(false);
+        }
     };
 
     return (
@@ -38,10 +156,18 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                 {/* Left: Image Canvas */}
                 <div className="w-full lg:w-2/3 bg-[#F3F4F6] flex items-center justify-center relative p-8 group">
                     <img 
-                        src={asset.imageUrl} 
+                        src={hasAccess && asset.fullQualityUrl ? asset.fullQualityUrl : (asset.previewUrl || asset.imageUrl)} 
                         alt={asset.title} 
                         className="max-h-full max-w-full object-contain shadow-2xl rounded-lg"
                     />
+                    {!hasAccess && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/5 pointer-events-none">
+                            <div className="bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow-lg border border-gray-200">
+                                <p className="text-sm font-bold text-gray-700">Watermarked Preview</p>
+                                <p className="text-xs text-gray-500 mt-1">Purchase to download full quality</p>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="absolute bottom-8 left-8 z-10">
                          <div className="bg-white/90 backdrop-blur border border-gray-200 px-4 py-2 rounded-full flex items-center gap-3 shadow-lg">
@@ -58,7 +184,13 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                     <div className="p-8 border-b border-gray-100">
                         <h2 className="text-3xl font-black text-[#0F172A] mb-2 leading-tight">{asset.title}</h2>
                         <div className="flex items-center gap-3 mb-8">
-                            <img src={asset.creator.avatar} className="w-10 h-10 rounded-full border border-gray-200" />
+                            <Image 
+                                src={asset.creator.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${asset.creator.id || 'default'}`} 
+                                alt={asset.creator.name || 'Creator'} 
+                                width={40} 
+                                height={40} 
+                                className="w-10 h-10 rounded-full border border-gray-200" 
+                            />
                             <div className="flex flex-col">
                                 <span className="text-sm font-bold text-[#0F172A]">{asset.creator.name}</span>
                                 <span className="text-xs text-gray-500 font-medium">{asset.creator.wallet}</span>
@@ -116,15 +248,57 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
 
                         {activeTab === 'license' && (
                             <div className="space-y-4">
-                                {asset.priceTiers.map((tier) => (
+                                {error && (
+                                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+                                        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                                        <p className="text-sm text-red-700 font-medium">{error}</p>
+                                    </div>
+                                )}
+
+                                {hasAccess ? (
+                                    <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                                        <Check className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                                        <h4 className="font-bold text-green-700 mb-2">Access Granted</h4>
+                                        <p className="text-sm text-green-600 mb-4">You have access to this asset</p>
+                                        <button
+                                            onClick={() => {
+                                                // Download full quality image (no watermark)
+                                                const downloadUrl = asset.fullQualityUrl || asset.imageUrl;
+                                                window.open(downloadUrl, '_blank');
+                                            }}
+                                            className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors"
+                                        >
+                                            <Download className="w-4 h-4 inline mr-2" />
+                                            Download Full Quality
+                                        </button>
+                                    </div>
+                                ) : paymentChallenge ? (
+                                    <div className="space-y-4">
+                                        {asset.priceTiers.map((tier) => {
+                                            // Use tier price directly (already in USDC)
+                                            // Fallback to challenge amount if tier price is invalid
+                                            let amountInUSDC = 0.01; // Default
+                                            if (tier.price && typeof tier.price === 'number' && !isNaN(tier.price) && tier.price > 0) {
+                                                amountInUSDC = tier.price;
+                                            } else if (paymentChallenge?.amount) {
+                                                const challengeAmount = typeof paymentChallenge.amount === 'string' 
+                                                    ? parseInt(paymentChallenge.amount, 10) 
+                                                    : Number(paymentChallenge.amount);
+                                                if (!isNaN(challengeAmount) && challengeAmount > 0) {
+                                                    amountInUSDC = challengeAmount / 1e6; // Convert from wei to USDC
+                                                }
+                                            }
+                                            return (
                                     <div 
                                         key={tier.tier} 
-                                        onClick={() => handleBuy(tier)}
-                                        className="group cursor-pointer bg-white border-2 border-transparent hover:border-[#0033FF] p-6 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300"
+                                                    onClick={() => !purchasing && handleBuy(tier)}
+                                                    className={`group bg-white border-2 border-transparent hover:border-[#0033FF] p-6 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 ${
+                                                        purchasing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                                    }`}
                                     >
                                         <div className="flex justify-between items-center mb-3">
                                             <h4 className="font-bold text-[#0F172A] text-lg capitalize">{tier.label}</h4>
-                                            <span className="text-[#0033FF] font-black text-xl">{tier.price} SOL</span>
+                                                        <span className="text-[#0033FF] font-black text-xl">{amountInUSDC.toFixed(2)} USDC</span>
                                         </div>
                                         <ul className="space-y-2 mb-6">
                                             {tier.features.map((f, i) => (
@@ -134,11 +308,29 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                                                 </li>
                                             ))}
                                         </ul>
-                                        <button className="w-full py-3 bg-gray-100 group-hover:bg-[#0033FF] text-[#0F172A] group-hover:text-white font-bold text-sm uppercase tracking-widest rounded-xl transition-colors">
-                                            {purchasing ? 'Processing...' : 'Purchase License'}
+                                                    <button 
+                                                        disabled={purchasing}
+                                                        className="w-full py-3 bg-gray-100 group-hover:bg-[#0033FF] text-[#0F172A] group-hover:text-white font-bold text-sm uppercase tracking-widest rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                                    >
+                                                        {purchasing ? (
+                                                            <>
+                                                                <Loader className="w-4 h-4 animate-spin" />
+                                                                Processing Payment...
+                                                            </>
+                                                        ) : (
+                                                            'Purchase License'
+                                                        )}
                                         </button>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                ))}
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <Loader className="w-8 h-8 animate-spin text-[#0033FF] mx-auto mb-3" />
+                                        <p className="text-sm text-gray-500">Loading payment options...</p>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

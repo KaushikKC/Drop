@@ -1,4 +1,4 @@
-# Stream402 Backend
+# drop Backend
 
 Ethereum-based X402 payment protocol backend with Story Protocol integration, featuring unique agent-to-agent micro-economy capabilities.
 
@@ -47,7 +47,7 @@ PORT=3001
 NODE_ENV=development
 
 # Database
-DATABASE_URL=postgresql://user:password@localhost:5432/stream402
+DATABASE_URL=postgresql://user:password@localhost:5432/drop
 
 # Ethereum / Base Network (for x402)
 ETHEREUM_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
@@ -253,7 +253,7 @@ See the `sdk/` directory for the TypeScript SDK.
 
 ```typescript
 import { ethers } from 'ethers';
-import { uploadAsset, payAndFetch, discover } from 'stream402-sdk';
+import { uploadAsset, payAndFetch, discover } from 'drop-sdk';
 
 // Upload
 const signer = new ethers.Wallet(privateKey, provider);
@@ -276,7 +276,7 @@ console.log('Download URL:', paymentResult.downloadUrl);
 ### Example: Unlock Layers
 
 ```typescript
-import { payForUnlockLayer } from 'stream402-sdk';
+import { payForUnlockLayer } from 'drop-sdk';
 
 // Pay for HD preview
 const hdResult = await payForUnlockLayer(
@@ -288,7 +288,7 @@ const hdResult = await payForUnlockLayer(
 ### Example: Negotiate
 
 ```typescript
-import { createNegotiation } from 'stream402-sdk';
+import { createNegotiation } from 'drop-sdk';
 
 const negotiation = await createNegotiation({
   assetId: 'uuid',

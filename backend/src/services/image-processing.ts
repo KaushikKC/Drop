@@ -25,13 +25,23 @@ export async function generatePerceptualHash(buffer: Buffer): Promise<string> {
     const average = sum / resized.length;
 
     // Generate hash: 1 if pixel > average, 0 otherwise
-    let hash = '';
+    let binaryHash = '';
     for (let i = 0; i < resized.length; i++) {
-      hash += resized[i] > average ? '1' : '0';
+      binaryHash += resized[i] > average ? '1' : '0';
     }
 
-    // Convert binary to hex
-    return Buffer.from(hash, 'binary').toString('hex');
+    // Convert 64-bit binary string to hex (should be 16 hex characters)
+    // Pad to ensure we have exactly 64 bits
+    const paddedBinary = binaryHash.padEnd(64, '0').substring(0, 64);
+    
+    // Convert binary to hex: 64 bits = 16 hex characters
+    let hexHash = '';
+    for (let i = 0; i < 64; i += 4) {
+      const nibble = paddedBinary.substring(i, i + 4);
+      hexHash += parseInt(nibble, 2).toString(16);
+    }
+    
+    return hexHash; // This will be exactly 16 characters (fits in VARCHAR(64))
   } catch (error) {
     logger.error('Error generating perceptual hash:', error);
     throw error;
@@ -129,5 +139,55 @@ export async function autoTagImage(buffer: Buffer, mimeType: string): Promise<st
  */
 export function generateImageHash(buffer: Buffer): string {
   return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
+ * Generate watermarked preview image
+ * Creates a lower quality, watermarked version for preview
+ */
+export async function generateWatermarkedPreview(
+  buffer: Buffer,
+  watermarkText: string = 'PREVIEW - DROP'
+): Promise<Buffer> {
+  try {
+    const metadata = await sharp(buffer).metadata();
+    const width = metadata.width || 800;
+    const height = metadata.height || 600;
+
+    // Create watermark text overlay using sharp's composite
+    // First, create a semi-transparent watermark text image
+    const watermarkSvg = Buffer.from(`
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <text 
+          x="50%" 
+          y="50%" 
+          font-family="Arial, sans-serif" 
+          font-size="${Math.min(width, height) / 8}" 
+          font-weight="bold" 
+          fill="rgba(0,0,0,0.15)" 
+          text-anchor="middle" 
+          dominant-baseline="middle"
+          transform="rotate(-45 ${width/2} ${height/2})">
+          ${watermarkText}
+        </text>
+      </svg>
+    `);
+
+    // Apply watermark overlay and reduce quality for preview
+    const watermarked = await sharp(buffer)
+      .composite([
+        {
+          input: watermarkSvg,
+          blend: 'over',
+        },
+      ])
+      .jpeg({ quality: 65 }) // Lower quality for preview (still good enough to see)
+      .toBuffer();
+
+    return watermarked;
+  } catch (error) {
+    logger.error('Error generating watermarked preview:', error);
+    throw error;
+  }
 }
 

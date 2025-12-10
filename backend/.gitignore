@@ -6,3 +6,4 @@ data/
 uploads/
 .DS_Store
 
+LOCAL_POSTGRES_SETUP.md

@@ -21,6 +21,9 @@ export const config = {
   },
   ipfs: {
     web3StorageToken: process.env.WEB3_STORAGE_TOKEN || '',
+    pinataApiKey: process.env.PINATA_API_KEY || '',
+    pinataApiSecret: process.env.PINATA_API_SECRET || '',
+    provider: (process.env.IPFS_PROVIDER || 'pinata') as 'pinata' | 'web3storage',
   },
   xmtp: {
     env: (process.env.XMTP_ENV || 'dev') as 'dev' | 'production',

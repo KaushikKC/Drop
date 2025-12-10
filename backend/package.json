@@ -1,7 +1,7 @@
 {
-  "name": "stream402-backend",
+  "name": "drop-backend",
   "version": "1.0.0",
-  "description": "Stream402 Backend - Ethereum-based X402 payment protocol with Story Protocol integration",
+  "description": "drop Backend - Ethereum-based X402 payment protocol with Story Protocol integration",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -11,7 +11,7 @@
     "test": "jest"
   },
   "keywords": [
-    "stream402",
+    "drop",
     "x402",
     "ethereum",
     "story-protocol",
@@ -19,10 +19,10 @@
     "payment",
     "micropayment"
   ],
-  "author": "Stream402",
+  "author": "drop",
   "license": "MIT",
   "dependencies": {
-    "@coinbase/x402": "^1.0.0",
+    "@coinbase/x402": "^0.7.3",
     "@story-protocol/core-sdk": "^1.0.0",
     "@xmtp/xmtp-js": "^10.0.0",
     "ethers": "^6.9.0",
@@ -34,11 +34,13 @@
     "uuid": "^9.0.1",
     "jsonwebtoken": "^9.0.2",
     "sharp": "^0.33.1",
-    "web3.storage": "^5.0.0",
+    "web3.storage": "^4.5.5",
+    "axios": "^1.6.2",
+    "form-data": "^4.0.0",
     "pino": "^8.17.2",
     "pino-pretty": "^10.3.1",
     "pino-http": "^8.5.0",
-    "x402-express": "^1.0.0",
+    "x402-express": "^0.7.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -49,8 +51,16 @@
     "@types/uuid": "^9.0.7",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.10.6",
+    "@types/jest": "^29.5.11",
+    "@types/supertest": "^6.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "ts-jest": "^29.1.1",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
+  },
+  "overrides": {
+    "parse-duration": ">=2.1.3"
   }
 }
 

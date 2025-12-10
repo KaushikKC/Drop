@@ -12,6 +12,7 @@ import {
   generateImageHash,
   autoTagImage,
   areImagesSimilar,
+  generateWatermarkedPreview,
 } from '../services/image-processing';
 
 const router = express.Router();
@@ -124,11 +125,11 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
     // Merge user tags with auto-tags
     const userTags = tagsInput
       .split(',')
-      .map((tag) => tag.trim())
-      .filter((tag) => tag.length > 0);
+      .map((tag: string) => tag.trim())
+      .filter((tag: string) => tag.length > 0);
     const allTags = [...new Set([...userTags, ...autoTags])]; // Remove duplicates
 
-    // Generate thumbnail
+    // Generate thumbnail (small preview)
     let thumbnailBuffer: Buffer | null = null;
     let thumbnailCid: string | undefined;
     let thumbnailUrl: string | undefined;
@@ -151,7 +152,31 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
       console.error('Thumbnail generation failed:', thumbError);
     }
 
-    // Upload to IPFS
+    // Generate watermarked preview (for unpaid users)
+    let watermarkedPreviewCid: string | undefined;
+    let watermarkedPreviewUrl: string | undefined;
+
+    try {
+      if (file.mimetype.startsWith('image/')) {
+        const watermarkedBuffer = await generateWatermarkedPreview(
+          buffer,
+          'PREVIEW - DROP'
+        );
+        const watermarkedResult = await uploadToIPFS(
+          watermarkedBuffer,
+          `preview_${assetId}_${file.originalname}`
+        );
+        watermarkedPreviewCid = watermarkedResult.cid;
+        watermarkedPreviewUrl = watermarkedResult.url;
+      }
+    } catch (watermarkError) {
+      console.error('Watermarked preview generation failed:', watermarkError);
+      // Fallback to thumbnail if watermarking fails
+      watermarkedPreviewUrl = thumbnailUrl;
+      watermarkedPreviewCid = thumbnailCid;
+    }
+
+    // Upload original full-quality image to IPFS (for paid users)
     const ipfsResult = await uploadToIPFS(buffer, `${assetId}_${file.originalname}`);
     const ipfsCid = ipfsResult.cid;
     const ipfsUrl = ipfsResult.url;
@@ -178,7 +203,14 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
       }
     }
 
+    // Truncate perceptual hash to 64 characters if it's longer (database constraint)
+    const truncatedPerceptualHash = perceptualHash 
+      ? (perceptualHash.length > 64 ? perceptualHash.substring(0, 64) : perceptualHash)
+      : null;
+
     // Save to database
+    // Note: We'll store watermarked preview in thumbnail_url for now (can add separate column later)
+    // Full quality image is in ipfs_url
     const result = await queryOne<AssetRow>(
       `INSERT INTO assets (
         id, title, description, price_wei, currency, recipient_address, creator_address,
@@ -195,13 +227,13 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
         recipient,
         creator,
         ipfsCid,
-        ipfsUrl,
+        ipfsUrl, // Full quality original
         thumbnailCid || null,
-        thumbnailUrl || null,
+        watermarkedPreviewUrl || thumbnailUrl || null, // Watermarked preview (or thumbnail as fallback)
         file.mimetype,
         file.size,
         allTags.length > 0 ? allTags : null,
-        perceptualHash || null,
+        truncatedPerceptualHash,
         storyIPId || null,
         !!storyIPId,
       ]
@@ -236,9 +268,33 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Upload error:', error);
+    
+    // Provide more detailed error information
+    let errorMessage = 'Upload failed';
+    let errorDetails: any = {};
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      errorDetails = {
+        name: error.name,
+        message: error.message,
+        stack: config.server.nodeEnv === 'development' ? error.stack : undefined,
+      };
+      
+      // Check for specific error types
+      if (error.message.includes('IPFS') || error.message.includes('storage')) {
+        errorMessage = 'IPFS upload failed. Please check your IPFS configuration (WEB3_STORAGE_TOKEN or PINATA_API_KEY).';
+      } else if (error.message.includes('database') || error.message.includes('query')) {
+        errorMessage = 'Database error. Please check your database connection.';
+      } else if (error.message.includes('sharp') || error.message.includes('image')) {
+        errorMessage = 'Image processing failed. Please ensure the file is a valid image.';
+      }
+    }
+    
     res.status(500).json({
       error: 'Upload failed',
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: errorMessage,
+      details: config.server.nodeEnv === 'development' ? errorDetails : undefined,
     });
   }
 });

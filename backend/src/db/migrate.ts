@@ -1,4 +1,8 @@
+import dotenv from 'dotenv';
 import { initDatabase } from "./index";
+
+// Load environment variables from .env file
+dotenv.config();
 
 async function main() {
   try {
