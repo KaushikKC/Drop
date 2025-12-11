@@ -1,19 +1,26 @@
 # Ignore everything
 *
 
-# But track the backend, api, and frontend folders and their contents
+# But track the backend, api, frontend, and sdk folders and their contents
 !backend/
 !backend/**
 !api/
 !api/**
 !frontend/
 !frontend/**
+!sdk/
+!sdk/**
 
 # Exclude node_modules, build files, and lock files in frontend
 frontend/node_modules/
 frontend/.next/
 frontend/package-lock.json
 frontend/.next/**
+
+# Exclude node_modules, dist, and lock files in sdk
+sdk/node_modules/
+sdk/dist/
+sdk/package-lock.json
 
 !.gitignore
 

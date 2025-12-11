@@ -1,0 +1,41 @@
+{
+  "name": "stream402-sdk",
+  "version": "0.1.0",
+  "description": "Stream402 SDK - Integrate x402 payment protocol into your applications",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && tsc --module esnext --outDir dist/esm",
+    "test": "ts-node test/test.ts",
+    "test:integration": "ts-node test/integration-test.ts",
+    "test:payAndFetch": "ts-node test/payAndFetch-test.ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "stream402",
+    "x402",
+    "solana",
+    "payment",
+    "sdk",
+    "monetization"
+  ],
+  "author": "Stream402",
+  "license": "MIT",
+  "dependencies": {
+    "x402-fetch": "^1.0.0",
+    "viem": "^2.0.0"
+  },
+  "peerDependencies": {
+    "ethers": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
+  }
+}
