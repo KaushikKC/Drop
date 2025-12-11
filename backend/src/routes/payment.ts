@@ -237,6 +237,7 @@ router.post('/verify', async (req: Request, res: Response) => {
     const blockNumber = receipt?.blockNumber || null;
 
     // Save payment record
+    let savedPaymentId: string | null = null;
     await transaction(async (client) => {
       // Insert payment
       const paymentResult = await client.query(
@@ -258,7 +259,7 @@ router.post('/verify', async (req: Request, res: Response) => {
         ]
       );
 
-      const paymentId = paymentResult.rows[0].id;
+      savedPaymentId = paymentResult.rows[0].id;
 
       // If this is a commercial license unlock, mint Story Protocol license
       if (unlockLayerId) {
@@ -287,7 +288,7 @@ router.post('/verify', async (req: Request, res: Response) => {
                 license.tokenId,
                 'commercial',
                 license.licenseId,
-                paymentId,
+                savedPaymentId,
                 new Date(),
               ]
             );
@@ -316,7 +317,7 @@ router.post('/verify', async (req: Request, res: Response) => {
               license.tokenId,
               'personal',
               license.licenseId,
-              paymentId,
+              savedPaymentId,
               new Date(),
             ]
           );
@@ -329,6 +330,16 @@ router.post('/verify', async (req: Request, res: Response) => {
     // Generate access token
     const accessToken = signJwt({ assetId, unlockLayerId }, '1h');
 
+    // Get license info if minted
+    const licenseInfo = await queryOne(
+      `SELECT license_token_id, story_license_id, license_type, minted_at
+       FROM licenses
+       WHERE asset_id = $1 AND buyer_address = $2
+       ORDER BY minted_at DESC
+       LIMIT 1`,
+      [assetId, verification.from]
+    );
+
     // Save to user_purchases table
     await query(
       `INSERT INTO user_purchases (
@@ -339,13 +350,23 @@ router.post('/verify', async (req: Request, res: Response) => {
         verification.from,
         assetId,
         transactionHash,
-        null, // payment_id from challenge (can be linked if needed)
+        savedPaymentId || null, // Link to payment record
         accessToken,
         unlockLayerId ? 'commercial' : 'personal',
       ]
     );
 
-    res.json({ accessToken });
+    res.json({
+      accessToken,
+      license: licenseInfo ? {
+        tokenId: licenseInfo.license_token_id,
+        storyLicenseId: licenseInfo.story_license_id,
+        type: licenseInfo.license_type,
+        mintedAt: licenseInfo.minted_at,
+      } : null,
+      transactionHash,
+      assetId,
+    });
   } catch (error) {
     console.error('Payment verification error:', error);
     res.status(500).json({

@@ -22,6 +22,7 @@ interface AssetRow {
   file_size?: number;
   tags?: string[];
   story_ip_id?: string;
+  perceptual_hash?: string; // For duplicate detection
   created_at?: Date | string;
 }
 
@@ -239,7 +240,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         currency: 'USDC',
         decimals: 6,
         amount: asset.price_wei,
-        tokenAddress: config.ethereum.usdcTokenAddress,
+        tokenAddress: config.ethereum.usdcTokenAddress || '0x98dC0e28942A1475FA1923b6415E2783843F68CD', // Fallback to MockUSDC
         recipient: pricing.recipient,
         expiresAt: Math.floor(Date.now() / 1000) + 300,
         assetId: id,

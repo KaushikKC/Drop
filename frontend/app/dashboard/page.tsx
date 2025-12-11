@@ -1,23 +1,12 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Wallet, Activity, Users, ArrowUpRight, Loader, Image as ImageIcon } from 'lucide-react';
+import { Wallet, Loader, Image as ImageIcon, Shield, Download, ExternalLink, Calendar } from 'lucide-react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { getCreatorDashboard } from '@/lib/api-client';
+import { getCreatorDashboard, getUserLicenses, getCreatorTransactions } from '@/lib/api-client';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { TopNav } from '../components/Navbar';
 import { getProxyIpfsUrl } from '@/lib/ipfs-utils';
-
-const data = [
-  { name: 'M', value: 2.4 },
-  { name: 'T', value: 1.8 },
-  { name: 'W', value: 3.6 },
-  { name: 'T', value: 2.2 },
-  { name: 'F', value: 4.8 },
-  { name: 'S', value: 3.1 },
-  { name: 'S', value: 2.5 },
-];
 
 interface DashboardProps {
     onDisconnect?: () => void;
@@ -32,18 +21,46 @@ interface Asset {
     price_wei: string;
     price?: number;
     currency: string;
+    ipfs_cid?: string;
+    story_ip_id?: string;
     created_at?: string;
     createdAt?: string;
+}
+
+interface Transaction {
+    id: string;
+    transactionHash: string;
+    amount: string;
+    amountWei: string;
+    blockNumber: number | null;
+    verified: boolean;
+    verifiedAt: string | null;
+    createdAt: string;
+    asset: {
+        id: string;
+        title: string;
+        thumbnailUrl?: string;
+        storyIPId?: string;
+    };
+    buyer: {
+        address: string;
+    };
+    license: {
+        type?: string;
+        storyLicenseId?: string;
+    };
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
     const { logout } = usePrivy();
     const { wallets } = useWallets();
     const router = useRouter();
-    const [assets, setAssets] = useState<Asset[]>([]);
+    const [createdAssets, setCreatedAssets] = useState<Asset[]>([]);
+    const [purchasedAssets, setPurchasedAssets] = useState<any[]>([]);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
-    const [stats, setStats] = useState<any>({});
-    const [earnings, setEarnings] = useState<any>({});
+    const [totalAssets, setTotalAssets] = useState(0);
+    const [totalRevenue, setTotalRevenue] = useState(0);
 
     useEffect(() => {
         const fetchDashboard = async () => {
@@ -51,10 +68,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
             
             setLoading(true);
             try {
+                // Fetch creator dashboard (uploaded assets)
                 const data = await getCreatorDashboard(wallets[0].address);
-                setAssets(data.assets || []);
-                setStats(data.stats || {});
-                setEarnings(data.earnings || {});
+                setCreatedAssets(data.assets || []);
+                setTotalAssets(data.stats?.total_assets || 0);
+
+                // Calculate total revenue from transactions
+                const transactionsData = await getCreatorTransactions(wallets[0].address);
+                setTransactions(transactionsData.transactions || []);
+                const revenue = transactionsData.transactions?.reduce((sum: number, tx: Transaction) => {
+                    return sum + parseFloat(tx.amount || '0');
+                }, 0) || 0;
+                setTotalRevenue(revenue);
+
+                // Fetch purchased licenses
+                const licensesData = await getUserLicenses(wallets[0].address);
+                setPurchasedAssets(licensesData.licenses || []);
             } catch (error) {
                 console.error('Failed to fetch dashboard:', error);
             } finally {
@@ -68,7 +97,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
     const handleDisconnect = async () => {
         try {
             await logout();
-            // Call optional callback to handle view change in parent
             if (onDisconnect) {
                 onDisconnect();
             } else {
@@ -79,22 +107,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
         }
     };
 
+    const formatDate = (dateString: string) => {
+        return new Date(dateString).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
+    const formatAddress = (address: string) => {
+        return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+    };
+
     return (
         <div className="min-h-screen bg-[#F9FAFB]">
             <TopNav currentView="dashboard" onChangeView={() => {}} />
             <div className="max-w-[1600px] mx-auto px-6 py-12">
-            <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
-                <div>
-                    <h1 className="text-4xl font-black text-[#0F172A] tracking-tight mb-2">DASHBOARD</h1>
-                    <p className="text-gray-500 font-medium text-sm">Overview of your registered IP and revenue.</p>
-                </div>
-                <div className="flex gap-4">
-                    <button className="px-6 py-3 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:text-black hover:shadow-md transition-all">
-                        Export Report
-                    </button>
-                    <button className="px-6 py-3 bg-[#0F172A] text-white font-bold rounded-lg text-sm hover:bg-[#0033FF] shadow-lg hover:shadow-blue-500/30 transition-all">
-                        Withdraw 42.5 SOL
-                    </button>
+                {/* Header */}
+                <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
+                    <div>
+                        <h1 className="text-4xl font-black text-[#0F172A] tracking-tight mb-2">DASHBOARD</h1>
+                        <p className="text-gray-500 font-medium text-sm">Overview of your IP assets and transactions.</p>
+                    </div>
                     <button 
                         onClick={handleDisconnect}
                         className="px-6 py-3 bg-red-500 text-white font-bold rounded-lg text-sm hover:bg-red-600 shadow-lg hover:shadow-red-500/30 transition-all"
@@ -102,169 +138,273 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                         Disconnect
                     </button>
                 </div>
-            </div>
 
-            {/* Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-                {[
-                    { 
-                        label: 'Revenue', 
-                        val: earnings.summary ? `${(Number(earnings.summary.total_earnings_wei || 0) / 1e6).toFixed(2)} USDC` : '0 USDC', 
-                        icon: Wallet, 
-                        change: '+12.5%', 
-                        color: 'text-[#0033FF]' 
-                    },
-                    { 
-                        label: 'Licenses', 
-                        val: stats.licenses_minted || '0', 
-                        icon: Activity, 
-                        change: '+3.2%', 
-                        color: 'text-purple-600' 
-                    },
-                    { 
-                        label: 'Total Assets', 
-                        val: stats.total_assets || '0', 
-                        icon: Users, 
-                        change: '+8.1%', 
-                        color: 'text-orange-500' 
-                    },
-                    { 
-                        label: 'Total Sales', 
-                        val: stats.total_sales || '0', 
-                        icon: ArrowUpRight, 
-                        change: '+1.5%', 
-                        color: 'text-green-600' 
-                    },
-                ].map((stat, i) => (
-                    <div key={i} className="bg-white border border-gray-100 p-8 rounded-2xl shadow-sm hover:shadow-lg transition-all relative overflow-hidden group">
-                        <div className={`absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity ${stat.color}`}>
-                            <stat.icon className="w-12 h-12" />
-                        </div>
-                        <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">{stat.label}</p>
-                        <h3 className="text-3xl font-black text-[#0F172A] mb-2">{stat.val}</h3>
-                        <span className={`text-xs font-bold ${stat.color} bg-gray-50 px-2 py-1 rounded`}>{stat.change}</span>
+                {/* Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+                    <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-sm hover:shadow-lg transition-all">
+                        <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">Total Assets</p>
+                        <h3 className="text-3xl font-black text-[#0F172A] mb-2">
+                            {loading ? <Loader className="w-6 h-6 animate-spin inline" /> : totalAssets}
+                        </h3>
+                        <p className="text-xs text-gray-500">Assets you've created and uploaded</p>
                     </div>
-                ))}
-            </div>
-
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Chart */}
-                <div className="lg:col-span-2 bg-white border border-gray-100 p-8 rounded-2xl shadow-sm">
-                    <h3 className="text-lg font-bold text-[#0F172A] mb-8">Revenue Analytics</h3>
-                    <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={data}>
-                                <XAxis 
-                                    dataKey="name" 
-                                    axisLine={false} 
-                                    tickLine={false} 
-                                    tick={{fill: '#94A3B8', fontSize: 12, fontWeight: 600}} 
-                                    dy={10}
-                                />
-                                <Tooltip 
-                                    cursor={{fill: '#F3F4F6'}}
-                                    contentStyle={{ background: '#fff', border: 'none', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                />
-                                <Bar 
-                                    dataKey="value" 
-                                    fill="#0F172A" 
-                                    radius={[4, 4, 0, 0]} 
-                                    barSize={40}
-                                />
-                            </BarChart>
-                        </ResponsiveContainer>
+                    <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-sm hover:shadow-lg transition-all">
+                        <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">Total Revenue</p>
+                        <h3 className="text-3xl font-black text-[#0F172A] mb-2">
+                            {loading ? <Loader className="w-6 h-6 animate-spin inline" /> : `${totalRevenue.toFixed(2)} USDC`}
+                        </h3>
+                        <p className="text-xs text-gray-500">Total earnings from license sales</p>
                     </div>
                 </div>
 
-                {/* My Assets */}
-                <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-sm flex flex-col">
-                    <h3 className="text-lg font-bold text-[#0F172A] mb-6">My Assets</h3>
+                {/* Transaction History */}
+                <div className="mb-12">
+                    <h3 className="text-2xl font-black text-[#0F172A] mb-6">Transaction History</h3>
                     {loading ? (
-                        <div className="flex items-center justify-center py-8">
-                            <Loader className="w-6 h-6 animate-spin text-[#0033FF]" />
+                        <div className="flex items-center justify-center py-20 bg-white border border-gray-100 rounded-2xl">
+                            <Loader className="w-8 h-8 animate-spin text-[#0033FF]" />
                         </div>
-                    ) : assets.length === 0 ? (
-                        <div className="text-center py-8">
-                            <ImageIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                            <p className="text-sm text-gray-500 font-medium">No assets uploaded yet</p>
-                            <p className="text-xs text-gray-400 mt-1">Upload your first asset to get started</p>
+                    ) : transactions.length === 0 ? (
+                        <div className="text-center py-20 bg-white border border-gray-100 rounded-2xl">
+                            <Wallet className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                            <p className="text-lg font-bold text-gray-500 mb-2">No transactions yet</p>
+                            <p className="text-sm text-gray-400">Transactions will appear here when someone purchases your assets</p>
                         </div>
                     ) : (
-                    <div className="space-y-2 flex-1 overflow-y-auto pr-2">
-                            {assets.slice(0, 6).map((asset) => (
-                                <div key={asset.id} className="flex items-center gap-4 py-3 px-3 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group">
-                                    <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                        <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50 border-b border-gray-200">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Asset</th>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Buyer</th>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">License</th>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Transaction</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {transactions.map((tx) => (
+                                            <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        {tx.asset.thumbnailUrl ? (
+                                                            <Image
+                                                                src={getProxyIpfsUrl(tx.asset.thumbnailUrl)}
+                                                                alt={tx.asset.title}
+                                                                width={40}
+                                                                height={40}
+                                                                className="w-10 h-10 rounded-lg object-cover"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                                                                <ImageIcon className="w-5 h-5 text-gray-400" />
+                                                            </div>
+                                                        )}
+                                                        <div>
+                                                            <p className="text-sm font-bold text-[#0F172A]">{tx.asset.title}</p>
+                                                            {tx.asset.storyIPId && (
+                                                                <a
+                                                                    href={`https://aeneid.storyscan.io/ipa/${tx.asset.storyIPId}`}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-xs text-[#0033FF] hover:underline flex items-center gap-1"
+                                                                >
+                                                                    <Shield className="w-3 h-3" />
+                                                                    View IP
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <p className="text-sm font-mono text-gray-700">{formatAddress(tx.buyer.address)}</p>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <p className="text-sm font-bold text-[#0F172A]">{tx.amount} USDC</p>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
+                                                        {tx.license.type || 'personal'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                        <Calendar className="w-4 h-4" />
+                                                        {formatDate(tx.createdAt)}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <a
+                                                        href={`https://sepolia.basescan.org/tx/${tx.transactionHash}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-[#0033FF] hover:underline flex items-center gap-1 text-sm font-medium"
+                                                    >
+                                                        View
+                                                        <ExternalLink className="w-3 h-3" />
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Created Assets Section */}
+                <div className="mb-12">
+                    <h3 className="text-2xl font-black text-[#0F172A] mb-6">Created Assets</h3>
+                    {loading ? (
+                        <div className="flex items-center justify-center py-20">
+                            <Loader className="w-8 h-8 animate-spin text-[#0033FF]" />
+                        </div>
+                    ) : createdAssets.length === 0 ? (
+                        <div className="text-center py-20 bg-white border border-gray-100 rounded-2xl">
+                            <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                            <p className="text-lg font-bold text-gray-500 mb-2">No assets created yet</p>
+                            <p className="text-sm text-gray-400">Upload your first asset to start monetizing</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                            {createdAssets.map((asset) => (
+                                <div key={asset.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all group cursor-pointer">
+                                    <div className="relative aspect-square bg-gray-100 overflow-hidden">
                                         {asset.thumbnail_ipfs_url || asset.thumbnailUrl ? (
                                             <Image
                                                 src={getProxyIpfsUrl(asset.thumbnail_ipfs_url || asset.thumbnailUrl || '')}
                                                 alt={asset.title}
-                                                width={64}
-                                                height={64}
-                                                className="w-full h-full object-cover"
+                                                width={400}
+                                                height={400}
+                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                             />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center">
-                                                <ImageIcon className="w-6 h-6 text-gray-400" />
+                                                <ImageIcon className="w-12 h-12 text-gray-300" />
                                             </div>
                                         )}
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-bold text-[#0F172A] truncate">{asset.title}</p>
-                                        <p className="text-xs text-gray-400 font-medium">
+                                    <div className="p-4">
+                                        <h4 className="text-sm font-bold text-[#0F172A] mb-1 truncate">{asset.title}</h4>
+                                        <p className="text-xs text-gray-500 font-medium mb-2">
                                             {asset.price ? `${asset.price} ${asset.currency}` : `${Number(asset.price_wei) / 1e6} ${asset.currency}`}
                                         </p>
+                                        {asset.story_ip_id && (
+                                            <a
+                                                href={`https://aeneid.storyscan.io/ipa/${asset.story_ip_id}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs text-[#0033FF] hover:underline flex items-center gap-1"
+                                            >
+                                                <Shield className="w-3 h-3" />
+                                                View IP on Story Protocol
+                                            </a>
+                                        )}
+                                        {asset.ipfs_cid && (
+                                            <p className="text-xs text-gray-400 font-mono mt-1 truncate" title={asset.ipfs_cid}>
+                                                CID: {asset.ipfs_cid.substring(0, 12)}...
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
-            </div>
 
-            {/* Assets Grid */}
-            <div className="mt-8">
-                <h3 className="text-2xl font-black text-[#0F172A] mb-6">All Assets</h3>
-                {loading ? (
-                    <div className="flex items-center justify-center py-20">
-                        <Loader className="w-8 h-8 animate-spin text-[#0033FF]" />
-                    </div>
-                ) : assets.length === 0 ? (
-                    <div className="text-center py-20 bg-white border border-gray-100 rounded-2xl">
-                        <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                        <p className="text-lg font-bold text-gray-500 mb-2">No assets yet</p>
-                        <p className="text-sm text-gray-400">Upload your first asset to start monetizing</p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                        {assets.map((asset) => (
-                            <div key={asset.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all group cursor-pointer">
-                                <div className="relative aspect-square bg-gray-100 overflow-hidden">
-                                    {asset.thumbnail_ipfs_url || asset.thumbnailUrl ? (
-                                        <Image
-                                            src={getProxyIpfsUrl(asset.thumbnail_ipfs_url || asset.thumbnailUrl || '')}
-                                            alt={asset.title}
-                                            width={400}
-                                            height={400}
-                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                        />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center">
-                                            <ImageIcon className="w-12 h-12 text-gray-300" />
+                {/* Purchased Assets Section */}
+                <div className="mb-12">
+                    <h3 className="text-2xl font-black text-[#0F172A] mb-6">Purchased</h3>
+                    {loading ? (
+                        <div className="flex items-center justify-center py-20">
+                            <Loader className="w-8 h-8 animate-spin text-[#0033FF]" />
+                        </div>
+                    ) : purchasedAssets.length === 0 ? (
+                        <div className="text-center py-20 bg-white border border-gray-100 rounded-2xl">
+                            <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                            <p className="text-lg font-bold text-gray-500 mb-2">No purchased assets yet</p>
+                            <p className="text-sm text-gray-400">Purchase licenses to access premium content</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {purchasedAssets.map((purchase) => (
+                                <div key={purchase.purchaseId} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all">
+                                    <div className="relative aspect-square bg-gray-100 overflow-hidden">
+                                        {purchase.asset.thumbnailUrl ? (
+                                            <Image
+                                                src={getProxyIpfsUrl(purchase.asset.thumbnailUrl)}
+                                                alt={purchase.asset.title}
+                                                width={400}
+                                                height={400}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <ImageIcon className="w-12 h-12 text-gray-300" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="p-4">
+                                        <h4 className="text-sm font-bold text-[#0F172A] mb-2 truncate">{purchase.asset.title}</h4>
+                                        <div className="space-y-2 text-xs mb-3">
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-500">License:</span>
+                                                <span className="font-medium text-[#0033FF] capitalize">{purchase.license.type}</span>
+                                            </div>
+                                            {purchase.license.storyLicenseId && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">License ID:</span>
+                                                    <span className="font-mono text-gray-600 text-[10px]">
+                                                        {purchase.license.storyLicenseId.substring(0, 8)}...
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {purchase.transaction.hash && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">TX:</span>
+                                                    <a
+                                                        href={`https://sepolia.basescan.org/tx/${purchase.transaction.hash}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="font-mono text-[#0033FF] hover:underline text-[10px]"
+                                                    >
+                                                        {purchase.transaction.hash.substring(0, 8)}...
+                                                    </a>
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
+                                        {purchase.asset.storyIPId && (
+                                            <div className="mb-3 pt-2 border-t border-gray-100">
+                                                <a
+                                                    href={`https://aeneid.storyscan.io/ipa/${purchase.asset.storyIPId}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-[#0033FF] font-bold text-xs hover:underline flex items-center gap-1"
+                                                >
+                                                    <Shield className="w-3 h-3" />
+                                                    View License Onchain
+                                                </a>
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={() => {
+                                                const downloadUrl = purchase.asset.ipfsUrl;
+                                                window.open(downloadUrl, '_blank');
+                                            }}
+                                            className="w-full mt-3 px-4 py-2 bg-[#0033FF] text-white font-bold rounded-lg hover:bg-blue-700 transition-colors text-xs flex items-center justify-center gap-2"
+                                        >
+                                            <Download className="w-3 h-3" />
+                                            Download
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="p-4">
-                                    <h4 className="text-sm font-bold text-[#0F172A] mb-1 truncate">{asset.title}</h4>
-                                    <p className="text-xs text-gray-500 font-medium">
-                                        {asset.price ? `${asset.price} ${asset.currency}` : `${Number(asset.price_wei) / 1e6} ${asset.currency}`}
-                                    </p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

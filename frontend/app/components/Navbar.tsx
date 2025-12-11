@@ -65,7 +65,7 @@ export const TopNav: React.FC<Omit<NavProps, 'walletConnected' | 'onConnectWalle
                     : 'text-gray-500 hover:text-[#0F172A]'
                 }`}
             >
-                Explore
+                Dashboard
                 {pathname === '/dashboard' && <span className="absolute -bottom-6 left-0 w-full h-0.5 bg-[#0033FF]"></span>}
             </button>
             <button 
@@ -154,9 +154,8 @@ export const TopNav: React.FC<Omit<NavProps, 'walletConnected' | 'onConnectWalle
       {isMobileMenuOpen && (
         <div className="absolute top-[73px] left-0 right-0 bg-white border-b border-gray-200 md:hidden flex flex-col p-6 animate-in slide-in-from-top-2 shadow-xl">
             <button onClick={() => { router.push('/'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Home</button>
-            <button onClick={() => { router.push('/dashboard'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Explore</button>
-            <button onClick={() => { router.push('/upload-flow'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Create</button>
             <button onClick={() => { router.push('/dashboard'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Dashboard</button>
+            <button onClick={() => { router.push('/upload-flow'); setIsMobileMenuOpen(false); }} className="text-left py-3 font-bold text-lg text-[#0F172A]">Create</button>
         </div>
       )}
     </nav>

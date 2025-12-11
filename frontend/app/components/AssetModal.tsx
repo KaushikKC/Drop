@@ -25,6 +25,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
     const [hasAccess, setHasAccess] = useState(false);
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [paymentChallenge, setPaymentChallenge] = useState<any>(null);
+    const [licenseInfo, setLicenseInfo] = useState<any>(null); // Store license info after purchase
 
     // Check if user has access when modal opens
     useEffect(() => {
@@ -127,10 +128,14 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                 asset.id
             );
 
-            // Save access token
+            // Save access token and license info
             localStorage.setItem(`access_token_${asset.id}`, result.accessToken);
             setAccessToken(result.accessToken);
             setHasAccess(true);
+            if (result.license) {
+                setLicenseInfo(result.license);
+                localStorage.setItem(`license_${asset.id}`, JSON.stringify(result.license));
+            }
             onPurchase(tier);
         } catch (err: any) {
             console.error('Payment error:', err);
@@ -276,21 +281,62 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                                 )}
 
                                 {hasAccess ? (
-                                    <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                                    <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center space-y-4">
                                         <Check className="w-12 h-12 text-green-500 mx-auto mb-3" />
                                         <h4 className="font-bold text-green-700 mb-2">Access Granted</h4>
                                         <p className="text-sm text-green-600 mb-4">You have access to this asset</p>
-                                        <button
-                                            onClick={() => {
-                                                // Download full quality image (no watermark)
-                                                const downloadUrl = asset.fullQualityUrl || asset.imageUrl;
-                                                window.open(downloadUrl, '_blank');
-                                            }}
-                                            className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors"
-                                        >
-                                            <Download className="w-4 h-4 inline mr-2" />
-                                            Download Full Quality
-                                        </button>
+                                        
+                                        {/* License Info */}
+                                        {licenseInfo && (
+                                            <div className="bg-white/50 rounded-lg p-4 mb-4 text-left">
+                                                <p className="text-xs font-bold text-gray-500 uppercase mb-2">License Details</p>
+                                                <p className="text-xs text-gray-700 mb-1">
+                                                    <span className="font-medium">Type:</span> {licenseInfo.type || 'personal'}
+                                                </p>
+                                                {licenseInfo.storyLicenseId && (
+                                                    <p className="text-xs text-gray-700 mb-1">
+                                                        <span className="font-medium">License ID:</span> 
+                                                        <span className="font-mono text-[#0033FF] ml-1">
+                                                            {licenseInfo.storyLicenseId.substring(0, 10)}...{licenseInfo.storyLicenseId.substring(licenseInfo.storyLicenseId.length - 8)}
+                                                        </span>
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Action Buttons */}
+                                        <div className="flex flex-col gap-3">
+                                            <button
+                                                onClick={() => {
+                                                    // Download full quality image (no watermark)
+                                                    const downloadUrl = asset.fullQualityUrl || asset.imageUrl;
+                                                    window.open(downloadUrl, '_blank');
+                                                }}
+                                                className="w-full px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                                            >
+                                                <Download className="w-4 h-4" />
+                                                Download Full Quality
+                                            </button>
+                                            
+                                            {/* View License Onchain Link */}
+                                            {(licenseInfo?.storyLicenseId || asset.ipId) && (
+                                                <a
+                                                    href={
+                                                        licenseInfo?.storyLicenseId
+                                                            ? `https://aeneid.explorer.story.foundation/ipa/${asset.ipId || ''}`
+                                                            : asset.ipId
+                                                                ? `https://aeneid.explorer.story.foundation/ipa/${asset.ipId}`
+                                                                : '#'
+                                                    }
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="w-full px-6 py-2 bg-[#0033FF] text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                                                >
+                                                    <Shield className="w-4 h-4" />
+                                                    View License Onchain
+                                                </a>
+                                            )}
+                                        </div>
                                     </div>
                                 ) : paymentChallenge ? (
                                     <div className="space-y-4">

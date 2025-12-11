@@ -136,7 +136,7 @@ export async function getAsset(assetId: string, accessToken?: string) {
   };
 }
 
-// Verify payment (uses Next.js API route)
+// Verify payment (uses backend API)
 export async function verifyPayment(data: {
   signature: string;
   paymentRequestToken: string;
@@ -145,23 +145,34 @@ export async function verifyPayment(data: {
     expiresAt?: number;
   };
 }) {
-  const response = await fetch(`${getNextApiUrl()}/api/receipt`, {
+  const response = await fetch(`${BACKEND_API_URL}/api/payment/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      signature: data.signature,
+      transactionHash: data.signature, 
       paymentRequestToken: data.paymentRequestToken,
-      imageId: data.imageId,
+      assetId: data.imageId, 
       challenge: data.challenge,
     }),
   });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Payment verification failed' }));
-    throw new Error(error.error || 'Payment verification failed');
+    throw new Error(error.error || error.message || 'Payment verification failed');
   }
 
-  return response.json();
+  const result = await response.json();
+  return result as {
+    accessToken: string;
+    license?: {
+      tokenId?: string;
+      storyLicenseId?: string;
+      type?: string;
+      mintedAt?: string;
+    };
+    transactionHash?: string;
+    assetId?: string;
+  };
 }
 
 // Get all assets (for gallery) - Use backend API
@@ -278,5 +289,60 @@ export async function getCreatorDashboard(creatorAddress: string) {
     earnings,
     stats: stats.stats || {},
   };
+}
+
+// Get user's purchased licenses
+export async function getUserLicenses(walletAddress: string) {
+  const response = await fetch(`${BACKEND_API_URL}/api/user/licenses?wallet=${encodeURIComponent(walletAddress)}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch licenses: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+// Download asset with validation
+export async function downloadAsset(assetId: string, walletAddress: string, accessToken: string) {
+  const response = await fetch(
+    `${BACKEND_API_URL}/api/user/download/${assetId}?wallet=${encodeURIComponent(walletAddress)}`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+// Get transaction history for a creator
+export async function getCreatorTransactions(walletAddress: string, limit: number = 50, offset: number = 0) {
+  const response = await fetch(
+    `${BACKEND_API_URL}/api/provider/${encodeURIComponent(walletAddress)}/transactions?limit=${limit}&offset=${offset}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch transactions: ${response.statusText}`);
+  }
+
+  return response.json();
 }
 

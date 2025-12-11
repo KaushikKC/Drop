@@ -10,7 +10,7 @@ export const config = {
   ethereum: {
     rpcUrl: process.env.ETHEREUM_RPC_URL || '',
     network: process.env.ETHEREUM_NETWORK || 'sepolia',
-    usdcTokenAddress: process.env.USDC_TOKEN_ADDRESS || '',
+    usdcTokenAddress: process.env.USDC_TOKEN_ADDRESS || '0x98dC0e28942A1475FA1923b6415E2783843F68CD', // Default to MockUSDC on Base Sepolia
     privateKey: process.env.PRIVATE_KEY || '',
   },
   storyProtocol: {
