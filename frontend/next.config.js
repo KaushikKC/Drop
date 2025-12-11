@@ -29,6 +29,12 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'cloudflare-ipfs.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
         hostname: '*.ipfs.w3s.link',
         port: '',
         pathname: '/**',

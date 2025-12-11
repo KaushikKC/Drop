@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Upload, X, Check, Zap, Scan, AlertCircle } from 'lucide-react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { uploadAsset } from '@/lib/api-client';
+import { uploadAsset, checkImageHash } from '@/lib/api-client';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { TopNav } from '../components/Navbar';
@@ -24,22 +24,58 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [price, setPrice] = useState('0.01');
+    const [imageHash, setImageHash] = useState<string>('');
+    const [hashDisplay, setHashDisplay] = useState<string>('');
+    const [isUnique, setIsUnique] = useState<boolean>(true);
+    const [duplicateInfo, setDuplicateInfo] = useState<{
+      type: 'exact' | 'similar';
+      assetId: string;
+      title: string;
+      creator: string;
+    } | null>(null);
+    const [storyIPId, setStoryIPId] = useState<string | null>(null);
+    const [uploadSuccess, setUploadSuccess] = useState(false);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) processFile(e.target.files[0]);
     };
 
-    const processFile = (f: File) => {
+    const processFile = async (f: File) => {
         setFile(f);
         setPreview(URL.createObjectURL(f));
         setTitle(f.name.split('.')[0]);
         setError(null);
         setScanning(true);
-        // Simulate hash generation
-        setTimeout(() => {
-            setScanning(false);
+        setScanComplete(false);
+        setImageHash('');
+        setHashDisplay('');
+        setIsUnique(true);
+        setDuplicateInfo(null);
+
+        try {
+            // Check image hash and uniqueness
+            const result = await checkImageHash(f);
+            setImageHash(result.hash);
+            setHashDisplay(result.hashDisplay);
+            setIsUnique(result.isUnique);
+            
+            if (result.duplicateInfo) {
+                setDuplicateInfo(result.duplicateInfo);
+                setError(
+                    result.duplicateInfo.type === 'exact'
+                        ? `Duplicate image detected! An identical image "${result.duplicateInfo.title}" already exists.`
+                        : `Similar image detected! A very similar image "${result.duplicateInfo.title}" already exists.`
+                );
+            }
+            
             setScanComplete(true);
-        }, 2500);
+        } catch (err: any) {
+            console.error('Hash check error:', err);
+            setError(err.message || 'Failed to analyze image');
+            setScanComplete(false);
+        } finally {
+            setScanning(false);
+        }
     }
 
     const handlePublish = async () => {
@@ -64,16 +100,38 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
                 price: parseFloat(price) || 0.01,
                 recipient: walletAddress,
                 tags: [], // Can add tag input later
+                registerOnStory: true, // Enable Story Protocol registration
             });
 
-            console.log('Upload successful:', result);
-            if (onComplete) {
-                onComplete();
+            console.log('✅ Upload successful!', result);
+            console.log('📦 Asset ID:', result.assetId);
+            console.log('🔗 IPFS URL:', result.ipfsUrl);
+            console.log('📝 Story Protocol IP ID:', result.storyIPId || 'Not registered');
+            
+            if (result.storyIPId) {
+                setStoryIPId(result.storyIPId);
+                setUploadSuccess(true);
+                console.log('🌐 View on Story Protocol:', `https://aeneid.explorer.story.foundation/ipa/${result.storyIPId}`);
             } else {
-                router.push('/dashboard');
+                console.warn('⚠️  Story Protocol registration was not completed.');
+                console.warn('   Reason: Wallet has insufficient funds on Aeneid testnet');
+                console.warn('   Wallet address: Check backend logs for your wallet address');
+                console.warn('   Solution: Get testnet tokens from a faucet');
+                console.warn('   - Story Foundation Faucet (Gitcoin Passport score 5+)');
+                console.warn('   - QuickNode Faucet (requires 0.001 ETH on mainnet)');
+                console.warn('   - FaucetMe Pro (Discord connection)');
             }
+            
+            // Show success message for 3 seconds, then redirect
+            setTimeout(() => {
+                if (onComplete) {
+                    onComplete();
+                } else {
+                    router.push('/dashboard');
+                }
+            }, 3000);
         } catch (err: any) {
-            console.error('Upload error:', err);
+            console.error('❌ Upload error:', err);
             setError(err.message || 'Upload failed. Please try again.');
         } finally {
             setUploading(false);
@@ -113,14 +171,14 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
                  </div>
                  <button 
                     onClick={handlePublish}
-                    disabled={!scanComplete || uploading || !authenticated}
+                    disabled={!scanComplete || uploading || !authenticated || !isUnique}
                     className={`px-8 py-2.5 rounded-lg font-bold text-sm uppercase tracking-wide transition-all shadow-lg ${
-                        scanComplete && authenticated && !uploading
+                        scanComplete && authenticated && !uploading && isUnique
                         ? 'bg-[#0033FF] text-white hover:bg-blue-700 hover:shadow-blue-500/30' 
                         : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
                     }`}
                  >
-                    {uploading ? 'Uploading...' : scanComplete ? 'Publish IP' : 'Analyzing...'}
+                    {uploading ? 'Uploading...' : !isUnique ? 'Duplicate Detected' : scanComplete ? 'Publish IP' : 'Analyzing...'}
                  </button>
             </div>
 
@@ -155,14 +213,49 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
                             <div className="space-y-3">
                                 <div className="flex justify-between text-xs font-bold">
                                     <span className="text-gray-500">Hash Generation</span>
-                                    <span className={scanComplete ? 'text-[#0F172A]' : 'text-gray-400'}>{scanComplete ? '0x82...9A2' : 'Pending'}</span>
+                                    <span className={scanComplete ? 'text-[#0F172A] font-mono' : 'text-gray-400'}>
+                                        {scanComplete ? (hashDisplay || 'N/A') : 'Pending'}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between text-xs font-bold">
                                     <span className="text-gray-500">Uniqueness</span>
-                                    <span className={scanComplete ? 'text-green-600' : 'text-gray-400'}>{scanComplete ? '100% Unique' : 'Checking...'}</span>
+                                    <span className={
+                                        scanComplete 
+                                            ? (isUnique ? 'text-green-600' : 'text-red-600')
+                                            : 'text-gray-400'
+                                    }>
+                                        {scanComplete 
+                                            ? (isUnique ? '100% Unique' : 'Not Unique')
+                                            : 'Checking...'
+                                        }
+                                    </span>
                                 </div>
+                                {duplicateInfo && scanComplete && (
+                                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
+                                        <p className="text-red-700 font-medium">
+                                            {duplicateInfo.type === 'exact' ? 'Exact duplicate' : 'Similar image'} found:
+                                        </p>
+                                        <p className="text-red-600 mt-1">
+                                            "{duplicateInfo.title}" by {duplicateInfo.creator.slice(0, 6)}...{duplicateInfo.creator.slice(-4)}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
+
+                        {/* Success Message */}
+                        {uploadSuccess && storyIPId && (
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+                                <div className="flex items-center gap-3">
+                                    <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                                    <p className="text-sm text-green-700 font-bold">IP Registered on Story Protocol!</p>
+                                </div>
+                                <div className="ml-8">
+                                    <p className="text-xs text-gray-600 font-medium mb-1">IP ID:</p>
+                                    <p className="text-xs text-[#0033FF] font-mono bg-blue-50 p-2 rounded break-all">{storyIPId}</p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Error Message */}
                         {error && (

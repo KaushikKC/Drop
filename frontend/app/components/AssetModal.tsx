@@ -1,12 +1,13 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { X, Share2, Shield, Heart, Check, Box, Cpu, Download, AlertCircle, Loader } from 'lucide-react';
+import { X, Share2, Shield, Heart, Check, Box, Cpu, Download, AlertCircle, Loader, Copy } from 'lucide-react';
 import { Asset, PriceTier } from '../types';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { getAsset, verifyPayment } from '@/lib/api-client';
 import { payAndVerify } from '@/lib/payment';
 import { ethers } from 'ethers';
 import Image from 'next/image';
+import { getProxyIpfsUrl } from '@/lib/ipfs-utils';
 
 interface AssetModalProps {
     asset: Asset;
@@ -156,7 +157,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                 {/* Left: Image Canvas */}
                 <div className="w-full lg:w-2/3 bg-[#F3F4F6] flex items-center justify-center relative p-8 group">
                     <img 
-                        src={hasAccess && asset.fullQualityUrl ? asset.fullQualityUrl : (asset.previewUrl || asset.imageUrl)} 
+                        src={hasAccess && asset.fullQualityUrl 
+                            ? getProxyIpfsUrl(asset.fullQualityUrl) 
+                            : getProxyIpfsUrl(asset.previewUrl || asset.imageUrl)} 
                         alt={asset.title} 
                         className="max-h-full max-w-full object-contain shadow-2xl rounded-lg"
                     />
@@ -184,13 +187,11 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                     <div className="p-8 border-b border-gray-100">
                         <h2 className="text-3xl font-black text-[#0F172A] mb-2 leading-tight">{asset.title}</h2>
                         <div className="flex items-center gap-3 mb-8">
-                            <Image 
+                             <img 
                                 src={asset.creator.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${asset.creator.id || 'default'}`} 
                                 alt={asset.creator.name || 'Creator'} 
-                                width={40} 
-                                height={40} 
                                 className="w-10 h-10 rounded-full border border-gray-200" 
-                            />
+                             />
                             <div className="flex flex-col">
                                 <span className="text-sm font-bold text-[#0F172A]">{asset.creator.name}</span>
                                 <span className="text-xs text-gray-500 font-medium">{asset.creator.wallet}</span>
@@ -228,8 +229,27 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                                         <p className="text-sm text-[#0F172A] font-bold">{asset.width} x {asset.height}</p>
                                     </div>
                                     <div className="col-span-2 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                                        <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Fingerprint</p>
-                                        <p className="text-xs text-[#0033FF] font-mono break-all bg-blue-50 p-2 rounded">{asset.fingerprint}</p>
+                                        <p className="text-[10px] text-gray-500 uppercase font-bold mb-2">Fingerprint (pHash)</p>
+                                        <div className="flex items-center gap-2 bg-blue-50 p-2 rounded">
+                                            <p className="text-xs text-[#0033FF] font-mono break-all flex-1">{asset.fingerprint || 'N/A'}</p>
+                                            {asset.fingerprint && (
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(asset.fingerprint);
+                                                        // Show toast notification
+                                                        const toast = document.createElement('div');
+                                                        toast.className = 'fixed bottom-4 right-4 bg-[#0F172A] text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2';
+                                                        toast.innerHTML = '<span>✓ Copied to clipboard</span>';
+                                                        document.body.appendChild(toast);
+                                                        setTimeout(() => toast.remove(), 2000);
+                                                    }}
+                                                    className="p-1.5 hover:bg-blue-100 rounded transition-colors flex-shrink-0"
+                                                    title="Copy fingerprint"
+                                                >
+                                                    <Copy className="w-4 h-4 text-[#0033FF]" />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 

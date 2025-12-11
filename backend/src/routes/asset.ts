@@ -69,6 +69,7 @@ router.get('/list', async (req: Request, res: Response) => {
         },
         tags: asset.tags || [],
         storyIPId: asset.story_ip_id,
+        fingerprint: asset.perceptual_hash || '', // Add fingerprint
         createdAt: asset.created_at || new Date().toISOString(),
         // Metadata
         fileType: asset.file_type,
@@ -191,6 +192,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         thumbnailUrl: asset.thumbnail_ipfs_url,
         previewUrl: asset.thumbnail_ipfs_url, // Preview URL (for reference)
         storyIPId: asset.story_ip_id,
+        fingerprint: asset.perceptual_hash || '', // Add fingerprint
         fileType: asset.file_type,
         fileSize: asset.file_size,
         tags: asset.tags || [],
@@ -252,6 +254,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         thumbnailUrl: asset.thumbnail_ipfs_url,
         previewUrl: asset.thumbnail_ipfs_url, // Watermarked preview
         storyIPId: asset.story_ip_id,
+        fingerprint: asset.perceptual_hash || '', // Add fingerprint
         fileType: asset.file_type,
         fileSize: asset.file_size,
         tags: asset.tags || [],

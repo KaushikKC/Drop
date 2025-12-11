@@ -7,6 +7,7 @@ import { getCreatorDashboard } from '@/lib/api-client';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { TopNav } from '../components/Navbar';
+import { getProxyIpfsUrl } from '@/lib/ipfs-utils';
 
 const data = [
   { name: 'M', value: 2.4 },
@@ -196,7 +197,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                                     <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                                         {asset.thumbnail_ipfs_url || asset.thumbnailUrl ? (
                                             <Image
-                                                src={asset.thumbnail_ipfs_url || asset.thumbnailUrl || ''}
+                                                src={getProxyIpfsUrl(asset.thumbnail_ipfs_url || asset.thumbnailUrl || '')}
                                                 alt={asset.title}
                                                 width={64}
                                                 height={64}
@@ -241,7 +242,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                                 <div className="relative aspect-square bg-gray-100 overflow-hidden">
                                     {asset.thumbnail_ipfs_url || asset.thumbnailUrl ? (
                                         <Image
-                                            src={asset.thumbnail_ipfs_url || asset.thumbnailUrl || ''}
+                                            src={getProxyIpfsUrl(asset.thumbnail_ipfs_url || asset.thumbnailUrl || '')}
                                             alt={asset.title}
                                             width={400}
                                             height={400}

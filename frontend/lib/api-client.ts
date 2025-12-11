@@ -13,6 +13,41 @@ const getNextApiUrl = () => {
   return process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 };
 
+// Check image hash and uniqueness before upload
+export async function checkImageHash(file: File): Promise<{
+  hash: string;
+  hashDisplay: string;
+  imageHash: string;
+  isUnique: boolean;
+  duplicateInfo?: {
+    type: 'exact' | 'similar';
+    assetId: string;
+    title: string;
+    creator: string;
+  };
+}> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${BACKEND_API_URL}/api/upload/check`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorMessage = 'Failed to check image';
+    try {
+      const error = await response.json();
+      errorMessage = error.message || error.error || errorMessage;
+    } catch {
+      errorMessage = `Failed to check image: ${response.statusText}`;
+    }
+    throw new Error(errorMessage);
+  }
+
+  return await response.json();
+}
+
 // Upload asset to backend
 export async function uploadAsset(
   file: File,
@@ -22,6 +57,7 @@ export async function uploadAsset(
     recipient: string;
     tags?: string[];
     description?: string;
+    registerOnStory?: boolean; // Enable Story Protocol registration
   }
 ) {
   const formData = new FormData();
@@ -34,6 +70,9 @@ export async function uploadAsset(
   }
   if (metadata.description) {
     formData.append('description', metadata.description);
+  }
+  if (metadata.registerOnStory !== undefined) {
+    formData.append('registerOnStory', metadata.registerOnStory.toString());
   }
 
   const response = await fetch(`${BACKEND_API_URL}/api/upload`, {

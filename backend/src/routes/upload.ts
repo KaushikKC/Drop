@@ -14,9 +14,101 @@ import {
   areImagesSimilar,
   generateWatermarkedPreview,
 } from '../services/image-processing';
+import pino from 'pino';
+
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+// POST /api/upload/check - Check image hash and uniqueness before upload
+router.post('/check', upload.single('file'), async (req: Request, res: Response) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: 'No file provided' });
+    }
+
+    if (!file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ error: 'File must be an image' });
+    }
+
+    const buffer = Buffer.from(file.buffer);
+
+    // Generate perceptual hash
+    let perceptualHash: string | undefined;
+    let imageHash: string | undefined;
+    let isUnique = true;
+    let duplicateInfo: any = null;
+
+    try {
+      perceptualHash = await generatePerceptualHash(buffer);
+      imageHash = generateImageHash(buffer);
+
+      // Check for exact duplicates
+      const exactDuplicate = await queryOne(
+        'SELECT id, title, creator_address FROM assets WHERE perceptual_hash = $1',
+        [perceptualHash]
+      );
+
+      if (exactDuplicate) {
+        isUnique = false;
+        duplicateInfo = {
+          type: 'exact',
+          assetId: exactDuplicate.id,
+          title: exactDuplicate.title,
+          creator: exactDuplicate.creator_address,
+        };
+      } else {
+        // Check for similar images (within threshold)
+        const similarAssets = await query(
+          `SELECT id, title, perceptual_hash, creator_address FROM assets 
+           WHERE perceptual_hash IS NOT NULL 
+           AND file_type LIKE 'image/%'`,
+          []
+        );
+
+        for (const asset of similarAssets) {
+          if (areImagesSimilar(perceptualHash, asset.perceptual_hash, 5)) {
+            isUnique = false;
+            duplicateInfo = {
+              type: 'similar',
+              assetId: asset.id,
+              title: asset.title,
+              creator: asset.creator_address,
+            };
+            break;
+          }
+        }
+      }
+    } catch (hashError) {
+      console.error('Hash generation failed:', hashError);
+      return res.status(500).json({
+        error: 'Failed to generate hash',
+        message: hashError instanceof Error ? hashError.message : 'Unknown error',
+      });
+    }
+
+    // Format hash for display (first 4 and last 4 characters)
+    const hashDisplay = perceptualHash 
+      ? `${perceptualHash.substring(0, 4)}...${perceptualHash.substring(perceptualHash.length - 4)}`
+      : 'N/A';
+
+    res.json({
+      hash: perceptualHash,
+      hashDisplay: hashDisplay,
+      imageHash: imageHash,
+      isUnique: isUnique,
+      duplicateInfo: duplicateInfo,
+    });
+  } catch (error) {
+    console.error('Check hash error:', error);
+    res.status(500).json({
+      error: 'Failed to check image',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
 
 interface AssetRow {
   id: string;
@@ -187,26 +279,70 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
     const decimals = 6;
     const priceWei = parseEther(price.toString(), decimals);
 
-    // Register on Story Protocol if requested
-    let storyIPId: string | undefined;
-    if (registerOnStory) {
-      try {
-        const storyResult = await storyProtocolService.registerIP({
-          name: title,
-          description,
-          mediaUrl: ipfsUrl,
-        });
-        storyIPId = storyResult.ipId;
-      } catch (storyError) {
-        console.error('Story Protocol registration failed:', storyError);
-        // Continue without Story registration
-      }
-    }
-
     // Truncate perceptual hash to 64 characters if it's longer (database constraint)
     const truncatedPerceptualHash = perceptualHash 
       ? (perceptualHash.length > 64 ? perceptualHash.substring(0, 64) : perceptualHash)
       : null;
+
+    // Register on Story Protocol if requested
+    let storyIPId: string | undefined;
+    if (registerOnStory) {
+      try {
+        console.log('🔄 Starting Story Protocol registration...');
+        
+        const storyResult = await storyProtocolService.registerIP({
+          name: title,
+          description: description || '',
+          mediaUrl: ipfsUrl,
+          thumbnailUrl: thumbnailUrl || undefined,
+          mediaType: file.mimetype,
+          creatorAddress: creator,
+          fingerprint: truncatedPerceptualHash || undefined,
+        });
+        
+        storyIPId = storyResult.ipId;
+        console.log('✅ Story Protocol registration successful!');
+        console.log('📝 IP ID:', storyIPId);
+        console.log('🔗 Transaction Hash:', storyResult.txHash);
+        console.log('🌐 View on Story Protocol:', `https://aeneid.explorer.story.foundation/ipa/${storyIPId}`);
+        
+        logger.info('Story Protocol IP registered', { 
+          ipId: storyIPId, 
+          txHash: storyResult.txHash,
+          assetId: assetId,
+          title: title,
+          explorerUrl: `https://aeneid.explorer.story.foundation/ipa/${storyIPId}`
+        });
+      } catch (storyError: any) {
+        console.error('❌ Story Protocol registration failed:');
+        console.error('Error message:', storyError?.message || 'Unknown error');
+        
+        // Check if it's an insufficient funds error
+        if (storyError?.message?.includes('insufficient funds') || 
+            storyError?.message?.includes('exceeds the balance')) {
+          console.error('');
+          console.error('💡 SOLUTION: Get testnet tokens for your wallet');
+          console.error('   Wallet address: Check your PRIVATE_KEY wallet address');
+          console.error('   Network: Aeneid testnet (not Base Sepolia)');
+          console.error('   Faucets:');
+          console.error('   1. Story Foundation Faucet (Gitcoin Passport score 5+)');
+          console.error('   2. QuickNode Faucet (requires 0.001 ETH on mainnet)');
+          console.error('   3. FaucetMe Pro (Discord connection)');
+          console.error('');
+        }
+        
+        logger.error('Story Protocol registration failed', {
+          error: storyError?.message || String(storyError),
+          stack: config.server.nodeEnv === 'development' ? storyError?.stack : undefined,
+          assetId: assetId,
+          title: title
+        });
+        
+        // Continue without Story registration - don't fail the upload
+        // But log a warning that IP was not registered
+        console.warn('⚠️  Upload will continue without Story Protocol registration');
+      }
+    }
 
     // Save to database
     // Note: We'll store watermarked preview in thumbnail_url for now (can add separate column later)

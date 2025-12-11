@@ -60,7 +60,10 @@ async function uploadToPinata(
     );
 
     const cid = response.data.IpfsHash;
-    const url = `https://gateway.pinata.cloud/ipfs/${cid}`;
+    // Use public IPFS gateway that supports CORS better
+    // Fallback to multiple gateways for better availability
+    const url = `https://ipfs.io/ipfs/${cid}`;
+    // Alternative: `https://gateway.pinata.cloud/ipfs/${cid}` (has CORS issues)
 
     logger.info('Uploaded to Pinata IPFS', { cid, url, filename });
     return { cid, url };
@@ -167,5 +170,17 @@ export async function uploadMultipleToIPFS(
     logger.error('IPFS batch upload failed:', error);
     throw error;
   }
+}
+
+/**
+ * Upload JSON object to IPFS
+ */
+export async function uploadJSONToIPFS(
+  jsonObject: any,
+  filename: string = 'metadata.json'
+): Promise<{ cid: string; url: string }> {
+  const jsonString = JSON.stringify(jsonObject, null, 2);
+  const jsonBuffer = Buffer.from(jsonString, 'utf-8');
+  return await uploadToIPFS(jsonBuffer, filename);
 }
 

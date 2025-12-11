@@ -15,6 +15,7 @@ export const config = {
   },
   storyProtocol: {
     rpcUrl: process.env.STORY_PROTOCOL_RPC_URL || process.env.ETHEREUM_RPC_URL || '',
+    chainId: process.env.STORY_PROTOCOL_CHAIN_ID || 'aeneid', // "aeneid" for testnet, "sonic" for mainnet
     moduleAddress: process.env.STORY_PROTOCOL_MODULE_ADDRESS || '',
     registryAddress: process.env.STORY_PROTOCOL_REGISTRY_ADDRESS || '',
     licenseRegistryAddress: process.env.STORY_PROTOCOL_LICENSE_REGISTRY_ADDRESS || '',

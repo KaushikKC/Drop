@@ -6,6 +6,7 @@ import { MasonryGrid } from './components/MasonryGrid';
 import { AssetModal } from './components/AssetModal';
 import { Asset, ViewState } from './types';
 import { getAllAssets, searchAssets } from '@/lib/api-client';
+import { getProxyIpfsUrl as convertIpfsUrl } from '@/lib/ipfs-utils';
 import { Check, Loader } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -70,9 +71,10 @@ const App: React.FC = () => {
                 wallet: creatorAddress !== 'default' ? creatorAddress : (item.recipient || item.recipient_address || '0x...'),
               },
               // Use preview URL (watermarked) for gallery, full quality after payment
-              imageUrl: item.previewUrl || item.thumbnailUrl || item.thumbnail_ipfs_url || item.thumbnail_url || '',
-              previewUrl: item.previewUrl || item.thumbnailUrl || item.thumbnail_ipfs_url || '',
-              fullQualityUrl: item.ipfsUrl || item.ipfs_url || '', // Full quality (only after payment)
+              // Convert IPFS URLs to use proxy to bypass CORS
+              imageUrl: convertIpfsUrl(item.previewUrl || item.thumbnailUrl || item.thumbnail_ipfs_url || item.thumbnail_url || ''),
+              previewUrl: convertIpfsUrl(item.previewUrl || item.thumbnailUrl || item.thumbnail_ipfs_url || ''),
+              fullQualityUrl: convertIpfsUrl(item.ipfsUrl || item.ipfs_url || ''), // Full quality (only after payment)
               width: item.width || 800,
               height: item.height || 600,
               mimeType: item.file_type || item.fileType || item.mimeType || 'image/jpeg',

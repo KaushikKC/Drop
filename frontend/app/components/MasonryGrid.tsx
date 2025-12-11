@@ -2,6 +2,7 @@ import React from 'react';
 import { Asset } from '../types';
 import { Heart, Shield } from 'lucide-react';
 import Image from 'next/image';
+import { getProxyIpfsUrl } from '@/lib/ipfs-utils';
 
 interface MasonryGridProps {
   assets: Asset[];
@@ -26,7 +27,7 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({ assets, onAssetClick }
                     <Image 
                       width={500}
                       height={500}
-                      src={asset.imageUrl} 
+                      src={getProxyIpfsUrl(asset.imageUrl)} 
                       alt={asset.title} 
                       loading="lazy"
                       className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105"
