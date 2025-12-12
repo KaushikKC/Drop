@@ -22,6 +22,7 @@ interface AssetRow {
   file_size?: number;
   tags?: string[];
   story_ip_id?: string;
+  story_registered?: boolean;
   perceptual_hash?: string; // For duplicate detection
   created_at?: Date | string;
 }
@@ -344,6 +345,65 @@ router.get('/:id/layers', async (req: Request, res: Response) => {
   }
 });
 
+
+// POST /api/asset/:id/register-story - Register an existing asset on Story Protocol
+router.post('/:id/register-story', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Get asset
+    const asset = await queryOne<AssetRow>(
+      'SELECT * FROM assets WHERE id = $1',
+      [id]
+    );
+
+    if (!asset) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
+
+    if (asset.story_registered && asset.story_ip_id) {
+      return res.json({
+        ipId: asset.story_ip_id,
+        message: 'Asset already registered on Story Protocol',
+        alreadyRegistered: true,
+      });
+    }
+
+    // Register on Story Protocol
+    const { storyProtocolService } = await import('../services/story-protocol');
+    
+    const storyResult = await storyProtocolService.registerIP({
+      name: asset.title,
+      description: asset.description || '',
+      mediaUrl: asset.ipfs_url || '',
+      thumbnailUrl: asset.thumbnail_ipfs_url || undefined,
+      mediaType: asset.file_type || 'image/jpeg',
+      creatorAddress: asset.creator_address,
+      fingerprint: asset.perceptual_hash || undefined,
+    });
+
+    // Update asset with Story Protocol IP ID
+    await query(
+      `UPDATE assets 
+       SET story_ip_id = $1, story_registered = true 
+       WHERE id = $2`,
+      [storyResult.ipId, id]
+    );
+
+    res.json({
+      ipId: storyResult.ipId,
+      txHash: storyResult.txHash,
+      assetId: id,
+      explorerUrl: `https://aeneid.explorer.story.foundation/ipa/${storyResult.ipId}`,
+    });
+  } catch (error: any) {
+    console.error('Story Protocol registration error:', error);
+    res.status(500).json({
+      error: 'Registration failed',
+      message: error.message || 'Unknown error',
+    });
+  }
+});
 
 export default router;
 

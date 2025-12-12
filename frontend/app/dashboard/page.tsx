@@ -232,7 +232,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                                                             <p className="text-sm font-bold text-[#0F172A]">{tx.asset.title}</p>
                                                             {tx.asset.storyIPId && (
                                                                 <a
-                                                                    href={`https://aeneid.storyscan.io/ipa/${tx.asset.storyIPId}`}
+                                                                    href={`https://https://aeneid.explorer.story.foundation/ipa/${tx.asset.storyIPId}`}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
                                                                     className="text-xs text-[#0033FF] hover:underline flex items-center gap-1"
@@ -332,7 +332,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                                         </p>
                                         {asset.story_ip_id && (
                                             <a
-                                                href={`https://aeneid.storyscan.io/ipa/${asset.story_ip_id}`}
+                                                href={`https://aeneid.explorer.story.foundation/ipa/${asset.story_ip_id}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="text-xs text-[#0033FF] hover:underline flex items-center gap-1"
@@ -417,7 +417,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                                         {purchase.asset.storyIPId && (
                                             <div className="mb-3 pt-2 border-t border-gray-100">
                                                 <a
-                                                    href={`https://aeneid.storyscan.io/ipa/${purchase.asset.storyIPId}`}
+                                                    href={`https://https://aeneid.explorer.story.foundation/ipa/${purchase.asset.storyIPId}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="text-[#0033FF] font-bold text-xs hover:underline flex items-center gap-1"

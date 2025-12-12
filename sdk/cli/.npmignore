@@ -1,0 +1,15 @@
+src/
+tsconfig.json
+node_modules/
+*.log
+.env
+.DS_Store
+test/
+*.test.ts
+*.md
+!README.md
+.git/
+.gitignore
+.vscode/
+.idea/
+

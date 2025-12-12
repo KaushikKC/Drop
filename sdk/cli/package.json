@@ -1,0 +1,65 @@
+{
+  "name": "drop-cli-tool",
+  "version": "1.0.2",
+  "description": "Drop CLI - Developer tool for uploading assets, registering IP on Story Protocol, generating X402 receipts, verifying payments, and managing licenses",
+  "type": "module",
+  "bin": {
+    "drop": "dist/cli.js"
+  },
+  "main": "./dist/cli.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "test": "tsx src/cli.ts",
+    "link": "npm link",
+    "install-global": "npm install -g .",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "drop",
+    "cli",
+    "ip",
+    "story-protocol",
+    "x402",
+    "payment",
+    "ipfs",
+    "blockchain",
+    "base",
+    "ethereum",
+    "digital-assets",
+    "licensing"
+  ],
+  "author": "Drop",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/drop.git",
+    "directory": "sdk/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/drop/issues"
+  },
+  "homepage": "https://github.com/your-org/drop#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "chalk": "^5.6.2",
+    "commander": "^11.1.0",
+    "dotenv": "^16.6.1",
+    "form-data": "^4.0.5",
+    "ora": "^7.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
