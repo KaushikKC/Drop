@@ -16,6 +16,7 @@ import derivativeRoutes from "./routes/derivative";
 import agentRoutes from "./routes/agent";
 import providerRoutes from "./routes/provider";
 import userRoutes from "./routes/user";
+import royaltyRoutes from "./routes/royalty";
 
 const logger = pino({
   level: config.server.nodeEnv === "production" ? "info" : "debug",
@@ -57,6 +58,7 @@ app.use("/api/derivative", derivativeRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/provider", providerRoutes);
 app.use("/api/user", userRoutes);
+app.use("/api/royalty", royaltyRoutes);
 
 // Asset and unlock routes will use x402 middleware with dynamic pricing
 // We'll handle this in the route handlers themselves
