@@ -3,6 +3,8 @@ dist/
 *.log
 .env
 .DS_Store
+.npmrc
+*.tgz
 
 sdk/cli/.npmrc
 .npmignore

@@ -24,3 +24,5 @@ sdk/package-lock.json
 
 !.gitignore
 
+.npmrc
+*.tgz
