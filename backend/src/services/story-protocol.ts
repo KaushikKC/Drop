@@ -215,7 +215,7 @@ export class StoryProtocolService {
         tokenId: response.tokenId,
       });
 
-      return {
+    return {
         ipId: response.ipId || '',
         txHash: response.txHash || '',
         blockNumber: 0, // Story Protocol SDK doesn't return block number directly

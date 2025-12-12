@@ -46,7 +46,7 @@ export const Hero: React.FC<HeroProps> = ({ onSearch, onExplore }) => {
                 <div className="text-left animate-fade-in-up">
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-gray-200 shadow-sm mb-8">
                         <Activity className="w-4 h-4 text-[#0033FF]" />
-                        <span className="text-xs font-bold text-gray-600 uppercase tracking-widest">STORY x BASE SEPOLIA</span>
+                        <span className="text-xs font-bold text-gray-600 uppercase tracking-widest">STORY PROTOCOL</span>
                     </div>
 
                     <h1 className="text-6xl md:text-8xl font-black text-[#0F172A] leading-[0.9] tracking-tighter mb-6">

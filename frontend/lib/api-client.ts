@@ -97,13 +97,20 @@ export async function uploadAsset(
 }
 
 // Get asset from backend (returns 402 if unpaid)
-export async function getAsset(assetId: string, accessToken?: string) {
+// Also checks for existing purchases if walletAddress is provided
+export async function getAsset(assetId: string, accessToken?: string, walletAddress?: string) {
   const headers: HeadersInit = {};
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  const response = await fetch(`${BACKEND_API_URL}/api/asset/${assetId}`, {
+  // Add wallet address to query params to check for existing purchases
+  const url = new URL(`${BACKEND_API_URL}/api/asset/${assetId}`);
+  if (walletAddress) {
+    url.searchParams.set('wallet', walletAddress);
+  }
+
+  const response = await fetch(url.toString(), {
     headers,
   });
 
@@ -139,6 +146,7 @@ export async function getAsset(assetId: string, accessToken?: string) {
 // Verify payment (uses backend API)
 export async function verifyPayment(data: {
   signature: string;
+  platformTxHash?: string; // Platform fee transaction hash
   paymentRequestToken: string;
   imageId: string;
   challenge?: {

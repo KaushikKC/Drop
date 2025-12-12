@@ -371,9 +371,14 @@ export async function payForAsset(
     tokenAddress?: string;
     recipient: string;
     amount: string;
+    platformFee?: {
+      amount: string;
+      walletAddress: string;
+    };
+    creatorAmount?: string;
   },
   signer: ethers.Signer
-): Promise<string> {
+): Promise<{ creatorTxHash: string; platformTxHash?: string }> {
   const tokenAddress = challenge.tokenAddress || getUsdcAddress();
   const recipient = challenge.recipient;
   
@@ -432,16 +437,51 @@ export async function payForAsset(
     );
   }
 
-  // Transfer tokens
+  // Transfer tokens - handle platform fee if provided
   try {
-    const tx = await tokenContract.transfer(recipient, amount);
-    const receipt = await tx.wait();
+    if (challenge.platformFee && challenge.platformFee.walletAddress && challenge.creatorAmount) {
+      // Split payment: send to creator and platform separately
+      const creatorAmount = BigInt(challenge.creatorAmount);
+      const platformAmount = BigInt(challenge.platformFee.amount);
+      
+      // Verify amounts add up
+      if (creatorAmount + platformAmount !== amount) {
+        throw new Error('Payment split amounts do not match total amount');
+      }
 
-    if (!receipt) {
-      throw new Error('Transaction failed - no receipt');
+      // Send to creator (95%)
+      const creatorTx = await tokenContract.transfer(recipient, creatorAmount);
+      const creatorReceipt = await creatorTx.wait();
+      
+      if (!creatorReceipt) {
+        throw new Error('Creator payment transaction failed - no receipt');
+      }
+
+      // Send to platform (5%)
+      const platformTx = await tokenContract.transfer(challenge.platformFee.walletAddress, platformAmount);
+      const platformReceipt = await platformTx.wait();
+      
+      if (!platformReceipt) {
+        throw new Error('Platform fee transaction failed - no receipt');
+      }
+
+      return {
+        creatorTxHash: creatorReceipt.hash,
+        platformTxHash: platformReceipt.hash,
+      };
+    } else {
+      // Single payment (backward compatibility - no platform fee)
+      const tx = await tokenContract.transfer(recipient, amount);
+      const receipt = await tx.wait();
+
+      if (!receipt) {
+        throw new Error('Transaction failed - no receipt');
+      }
+
+      return {
+        creatorTxHash: receipt.hash,
+      };
     }
-
-    return receipt.hash;
   } catch (error: any) {
     if (error.code === 'ACTION_REJECTED') {
       throw new Error('Transaction rejected by user');
@@ -465,6 +505,11 @@ export async function payAndVerify(
     amount: string;
     paymentRequestToken?: string;
     expiresAt?: number; // Unix timestamp (optional)
+    platformFee?: {
+      amount: string;
+      walletAddress: string;
+    };
+    creatorAmount?: string;
   },
   signer: ethers.Signer,
   paymentRequestToken: string,
@@ -480,13 +525,14 @@ export async function payAndVerify(
   transactionHash?: string;
   assetId?: string;
 }> {
-  // 1. Make payment
-  const txHash = await payForAsset(challenge, signer);
+  // 1. Make payment (may include platform fee split)
+  const paymentResult = await payForAsset(challenge, signer);
 
   // 2. Verify payment (import dynamically to avoid circular deps)
   const { verifyPayment } = await import('./api-client');
   const result = await verifyPayment({
-    signature: txHash,
+    signature: paymentResult.creatorTxHash, // Main transaction hash (creator payment)
+    platformTxHash: paymentResult.platformTxHash, // Platform fee transaction hash (if exists)
     paymentRequestToken,
     imageId: assetId,
     challenge: challenge.expiresAt ? {

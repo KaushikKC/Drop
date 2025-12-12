@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { queryOne, query } from '../db';
 import { getAssetPricing, weiToDollarString } from '../middleware/x402-asset';
-import { verifyJwt } from '../utils/jwt';
+import { verifyJwt, signJwt } from '../utils/jwt';
 import { config } from '../config';
 
 const router = express.Router();
@@ -145,9 +145,11 @@ router.get('/unlocked/:id', async (req: Request, res: Response) => {
 
 // GET /api/asset/:id - Get asset with x402 payment
 // Check for X-PAYMENT header (x402 standard) or legacy JWT
+// Also checks for existing purchases by wallet address (permanent license)
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const wallet = req.query.wallet as string | undefined;
 
     // Check for x402 payment header
     const xPaymentHeader = req.headers['x-payment'] as string;
@@ -162,13 +164,37 @@ router.get('/:id', async (req: Request, res: Response) => {
       jwtVerified = !!(decoded && decoded.assetId === id);
     }
 
+    // Check if user has already purchased this asset (permanent license)
+    let hasExistingPurchase = false;
+    if (wallet && /^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+      const existingPurchase = await queryOne(
+        `SELECT up.*, p.verified
+         FROM user_purchases up
+         LEFT JOIN payments p ON up.transaction_hash = p.transaction_hash
+         WHERE up.user_address = $1 AND up.asset_id = $2 AND p.verified = true
+         LIMIT 1`,
+        [wallet.toLowerCase(), id]
+      );
+
+      if (existingPurchase) {
+        hasExistingPurchase = true;
+        // Regenerate access token for permanent access
+        const accessToken = signJwt({ assetId: id }, '10y'); // Long-lived token (10 years)
+        // Store updated token in user_purchases if needed
+        await query(
+          'UPDATE user_purchases SET access_token = $1 WHERE id = $2',
+          [accessToken, existingPurchase.id]
+        );
+      }
+    }
+
     // If x402 payment header present, verify with facilitator
     // For now, we'll trust the x402-fetch client has verified it
     // In production, you should verify with the facilitator
-    const hasPayment = !!xPaymentHeader || jwtVerified;
+    const hasPayment = !!xPaymentHeader || jwtVerified || hasExistingPurchase;
 
     if (hasPayment) {
-      // Payment verified - return asset data
+      // Payment verified OR existing purchase found - return asset data
       const asset = await queryOne<AssetRow>(
         'SELECT * FROM assets WHERE id = $1',
         [id]
@@ -184,7 +210,15 @@ router.get('/:id', async (req: Request, res: Response) => {
         [id]
       );
 
-      // Payment verified - return full quality image
+      // Generate/regenerate access token if user has existing purchase
+      let accessToken: string | undefined;
+      if (hasExistingPurchase && wallet) {
+        accessToken = signJwt({ assetId: id }, '10y'); // Long-lived token for permanent access
+      } else if (jwtVerified && token) {
+        accessToken = token; // Use existing token
+      }
+
+      // Payment verified or existing purchase - return full quality image
       return res.json({
         url: asset.ipfs_url, // Full quality original (no watermark)
         ipfsCid: asset.ipfs_cid,
@@ -197,6 +231,8 @@ router.get('/:id', async (req: Request, res: Response) => {
         fileType: asset.file_type,
         fileSize: asset.file_size,
         tags: asset.tags || [],
+        accessToken: accessToken, // Include access token if available
+        hasExistingPurchase: hasExistingPurchase, // Indicate this is from existing purchase
         unlockLayers: layers.map((layer) => ({
           layerId: layer.id,
           layerIndex: layer.layer_index,
@@ -229,6 +265,13 @@ router.get('/:id', async (req: Request, res: Response) => {
       [id]
     );
 
+    // Calculate platform fee (5%)
+    const platformFeePercentage = config.platform.feePercentage || 5;
+    const totalAmountWei = BigInt(asset.price_wei);
+    const platformFeeWei = (totalAmountWei * BigInt(Math.floor(platformFeePercentage * 100))) / BigInt(10000); // 5% = 500/10000
+    const creatorAmountWei = totalAmountWei - platformFeeWei;
+    const platformWallet = config.platform.walletAddress;
+
     // Return 402 with x402-compatible format
     // Include preview URL for unpaid users to see watermarked version
     return res.status(402).json({
@@ -241,6 +284,13 @@ router.get('/:id', async (req: Request, res: Response) => {
         decimals: 6,
         amount: asset.price_wei,
         tokenAddress: config.ethereum.usdcTokenAddress || '0x98dC0e28942A1475FA1923b6415E2783843F68CD', // Fallback to MockUSDC
+        // Platform fee information
+        platformFee: platformWallet ? {
+          percentage: platformFeePercentage,
+          amount: platformFeeWei.toString(),
+          walletAddress: platformWallet,
+        } : undefined,
+        creatorAmount: creatorAmountWei.toString(), // Amount creator will receive (95%)
         recipient: pricing.recipient,
         expiresAt: Math.floor(Date.now() / 1000) + 300,
         assetId: id,

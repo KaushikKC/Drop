@@ -86,14 +86,15 @@ router.get('/:address/stats', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/provider/:address/transactions - Get transaction history (payments received)
+// GET /api/provider/:address/transactions - Get transaction history (both received and sent)
 router.get('/:address/transactions', async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
     const limit = parseInt(req.query.limit as string) || 50;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    const transactions = await query(
+    // Get payments received (as creator) - someone bought your asset
+    const receivedTransactions = await query(
       `SELECT 
         p.id,
         p.transaction_hash,
@@ -106,28 +107,55 @@ router.get('/:address/transactions', async (req: Request, res: Response) => {
         a.title as asset_title,
         a.thumbnail_ipfs_url,
         a.story_ip_id,
+        a.creator_address,
+        a.recipient_address,
         p.payer_address,
         l.license_type,
-        l.story_license_id
+        l.story_license_id,
+        'received' as transaction_type
       FROM payments p
       JOIN assets a ON p.asset_id = a.id
       LEFT JOIN licenses l ON p.id = l.payment_id
-      WHERE a.recipient_address = $1 AND p.verified = true
-      ORDER BY p.created_at DESC
-      LIMIT $2 OFFSET $3`,
-      [address, limit, offset]
+      WHERE a.recipient_address = $1 AND p.verified = true`,
+      [address.toLowerCase()]
     );
 
-    const totalResult = await queryOne<{ count: string }>(
-      `SELECT COUNT(*) as count
-       FROM payments p
-       JOIN assets a ON p.asset_id = a.id
-       WHERE a.recipient_address = $1 AND p.verified = true`,
-      [address]
+    // Get payments sent (as buyer) - you bought someone else's asset
+    const sentTransactions = await query(
+      `SELECT 
+        p.id,
+        p.transaction_hash,
+        p.amount_wei,
+        p.block_number,
+        p.verified,
+        p.verified_at,
+        p.created_at,
+        a.id as asset_id,
+        a.title as asset_title,
+        a.thumbnail_ipfs_url,
+        a.story_ip_id,
+        a.creator_address,
+        a.recipient_address,
+        p.payer_address,
+        l.license_type,
+        l.story_license_id,
+        'sent' as transaction_type
+      FROM payments p
+      JOIN assets a ON p.asset_id = a.id
+      LEFT JOIN licenses l ON p.id = l.payment_id
+      WHERE p.payer_address = $1 AND p.verified = true`,
+      [address.toLowerCase()]
     );
+
+    // Combine and sort by date
+    const allTransactions = [...receivedTransactions, ...sentTransactions]
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(offset, offset + limit);
+
+    const total = receivedTransactions.length + sentTransactions.length;
 
     res.json({
-      transactions: transactions.map((tx: any) => ({
+      transactions: allTransactions.map((tx: any) => ({
         id: tx.id,
         transactionHash: tx.transaction_hash,
         amountWei: tx.amount_wei.toString(),
@@ -136,21 +164,31 @@ router.get('/:address/transactions', async (req: Request, res: Response) => {
         verified: tx.verified,
         verifiedAt: tx.verified_at,
         createdAt: tx.created_at,
+        type: tx.transaction_type, // 'received' or 'sent'
         asset: {
           id: tx.asset_id,
           title: tx.asset_title,
           thumbnailUrl: tx.thumbnail_ipfs_url,
           storyIPId: tx.story_ip_id,
+          creatorAddress: tx.creator_address,
+          recipientAddress: tx.recipient_address,
         },
+        // For 'received': buyer is the payer, seller is you (recipient)
+        // For 'sent': buyer is you (payer), seller is the recipient
         buyer: {
           address: tx.payer_address,
+        },
+        seller: {
+          address: tx.recipient_address,
         },
         license: {
           type: tx.license_type,
           storyLicenseId: tx.story_license_id,
         },
       })),
-      total: parseInt(totalResult?.count || '0', 10),
+      total,
+      received: receivedTransactions.length,
+      sent: sentTransactions.length,
     });
   } catch (error) {
     console.error('Get transactions error:', error);

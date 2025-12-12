@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Share2, Shield, Heart, Check, Box, Cpu, Download, AlertCircle, Loader, Copy } from 'lucide-react';
 import { Asset, PriceTier } from '../types';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { getAsset, verifyPayment } from '@/lib/api-client';
+import { getAsset, verifyPayment, downloadAsset } from '@/lib/api-client';
 import { payAndVerify } from '@/lib/payment';
 import { ethers } from 'ethers';
 import Image from 'next/image';
@@ -26,27 +26,56 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [paymentChallenge, setPaymentChallenge] = useState<any>(null);
     const [licenseInfo, setLicenseInfo] = useState<any>(null); // Store license info after purchase
+    const [downloading, setDownloading] = useState(false);
 
     // Check if user has access when modal opens
     useEffect(() => {
         const checkAccess = async () => {
+            const walletAddress = wallets[0]?.address;
             const storedToken = localStorage.getItem(`access_token_${asset.id}`);
-            if (storedToken) {
+            
+            // First, check with wallet address to see if user has existing purchase (permanent license)
+            if (walletAddress) {
                 try {
-                    const result = await getAsset(asset.id, storedToken);
+                    const result = await getAsset(asset.id, storedToken || undefined, walletAddress);
+                    if (!result.requiresPayment) {
+                        setHasAccess(true);
+                        // Use returned access token or stored token
+                        const token = result.data?.accessToken || storedToken;
+                        if (token) {
+                            setAccessToken(token);
+                            localStorage.setItem(`access_token_${asset.id}`, token);
+                        }
+                        // If this is from existing purchase, don't show payment challenge
+                        if (result.data?.hasExistingPurchase) {
+                            return; // User already owns this license permanently
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error checking existing purchase:', err);
+                }
+            }
+            
+            // If no existing purchase found, check stored token
+            if (storedToken && !hasAccess) {
+                try {
+                    const result = await getAsset(asset.id, storedToken, walletAddress);
                     if (!result.requiresPayment) {
                         setHasAccess(true);
                         setAccessToken(storedToken);
+                        return;
                     } else {
                         localStorage.removeItem(`access_token_${asset.id}`);
                     }
                 } catch (err) {
                     localStorage.removeItem(`access_token_${asset.id}`);
                 }
-            } else {
-                // Fetch payment challenge
+            }
+            
+            // If no access found, fetch payment challenge
+            if (!hasAccess) {
                 try {
-                    const result = await getAsset(asset.id);
+                    const result = await getAsset(asset.id, undefined, walletAddress);
                     if (result.requiresPayment) {
                         // The challenge is nested: result.challenge contains the challenge object
                         const challenge = result.challenge;
@@ -65,6 +94,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                                 tokenAddress: challenge.tokenAddress || undefined,
                                 recipient: challenge.recipient || '',
                                 paymentRequestToken: challenge.paymentRequestToken || '',
+                                // Include platform fee information if available
+                                platformFee: challenge.platformFee,
+                                creatorAmount: challenge.creatorAmount,
                             };
                             setPaymentChallenge(normalizedChallenge);
                         } else {
@@ -122,6 +154,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                     amount: amountStr, // Already validated as string
                     paymentRequestToken: paymentRequestToken,
                     expiresAt: paymentChallenge.expiresAt,
+                    // Include platform fee information if available
+                    platformFee: paymentChallenge.platformFee,
+                    creatorAmount: paymentChallenge.creatorAmount,
                 },
                 signer,
                 paymentRequestToken,
@@ -307,15 +342,68 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                                         {/* Action Buttons */}
                                         <div className="flex flex-col gap-3">
                                             <button
-                                                onClick={() => {
-                                                    // Download full quality image (no watermark)
-                                                    const downloadUrl = asset.fullQualityUrl || asset.imageUrl;
-                                                    window.open(downloadUrl, '_blank');
+                                                onClick={async () => {
+                                                    if (!accessToken || !wallets[0]?.address) {
+                                                        setError('Access token or wallet not available');
+                                                        return;
+                                                    }
+
+                                                    setDownloading(true);
+                                                    setError(null);
+
+                                                    try {
+                                                        // Simplified: Direct download from IPFS (full quality, no watermark)
+                                                        const ipfsUrl = asset.fullQualityUrl || asset.imageUrl;
+                                                        
+                                                        if (!ipfsUrl) {
+                                                            throw new Error('Download URL not available');
+                                                        }
+
+                                                        // Fetch the file as a blob
+                                                        const response = await fetch(getProxyIpfsUrl(ipfsUrl), {
+                                                            method: 'GET',
+                                                        });
+
+                                                        if (!response.ok) {
+                                                            throw new Error('Failed to fetch file');
+                                                        }
+
+                                                        const blob = await response.blob();
+                                                        
+                                                        // Create a download link and trigger download
+                                                        const url = window.URL.createObjectURL(blob);
+                                                        const link = document.createElement('a');
+                                                        link.href = url;
+                                                        // Extract file extension from mimeType
+                                                        const fileExt = asset.mimeType?.split('/')[1] || 'jpg';
+                                                        link.download = `${asset.title || 'asset'}.${fileExt}`;
+                                                        document.body.appendChild(link);
+                                                        link.click();
+                                                        
+                                                        // Cleanup
+                                                        document.body.removeChild(link);
+                                                        window.URL.revokeObjectURL(url);
+                                                    } catch (err: any) {
+                                                        console.error('Download error:', err);
+                                                        setError(err.message || 'Download failed. Please try again.');
+                                                    } finally {
+                                                        setDownloading(false);
+                                                    }
                                                 }}
-                                                className="w-full px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                                                disabled={downloading || !accessToken}
+                                                className="w-full px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                <Download className="w-4 h-4" />
-                                                Download Full Quality
+                                                {downloading ? (
+                                                    <>
+                                                        <Loader className="w-4 h-4 animate-spin" />
+                                                        Downloading...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Download className="w-4 h-4" />
+                                                        Download Full Quality
+                                                    </>
+                                                )}
                                             </button>
                                             
                                             {/* View License Onchain Link */}

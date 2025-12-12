@@ -36,13 +36,19 @@ interface Transaction {
     verified: boolean;
     verifiedAt: string | null;
     createdAt: string;
+    type: 'received' | 'sent'; // 'received' = someone bought your asset, 'sent' = you bought someone's asset
     asset: {
         id: string;
         title: string;
         thumbnailUrl?: string;
         storyIPId?: string;
+        creatorAddress?: string;
+        recipientAddress?: string;
     };
     buyer: {
+        address: string;
+    };
+    seller: {
         address: string;
     };
     license: {
@@ -82,8 +88,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                 setTotalRevenue(revenue);
 
                 // Fetch purchased licenses
-                const licensesData = await getUserLicenses(wallets[0].address);
-                setPurchasedAssets(licensesData.licenses || []);
+                try {
+                    const licensesData = await getUserLicenses(wallets[0].address);
+                    console.log('Purchased licenses fetched:', licensesData); // Debug log
+                    // Handle both { licenses: [...] } and direct array response
+                    const licenses = licensesData?.licenses || licensesData || [];
+                    setPurchasedAssets(Array.isArray(licenses) ? licenses : []);
+                } catch (error) {
+                    console.error('Failed to fetch purchased licenses:', error);
+                    setPurchasedAssets([]); // Set empty array on error
+                }
             } catch (error) {
                 console.error('Failed to fetch dashboard:', error);
             } finally {
@@ -124,20 +138,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
     return (
         <div className="min-h-screen bg-[#F9FAFB]">
             <TopNav currentView="dashboard" onChangeView={() => {}} />
-            <div className="max-w-[1600px] mx-auto px-6 py-12">
+        <div className="max-w-[1600px] mx-auto px-6 py-12">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
-                    <div>
-                        <h1 className="text-4xl font-black text-[#0F172A] tracking-tight mb-2">DASHBOARD</h1>
+            <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
+                <div>
+                    <h1 className="text-4xl font-black text-[#0F172A] tracking-tight mb-2">DASHBOARD</h1>
                         <p className="text-gray-500 font-medium text-sm">Overview of your IP assets and transactions.</p>
-                    </div>
+                </div>
                     <button 
                         onClick={handleDisconnect}
                         className="px-6 py-3 bg-red-500 text-white font-bold rounded-lg text-sm hover:bg-red-600 shadow-lg hover:shadow-red-500/30 transition-all"
                     >
                         Disconnect
                     </button>
-                </div>
+            </div>
 
                 {/* Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
@@ -168,7 +182,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                         <div className="text-center py-20 bg-white border border-gray-100 rounded-2xl">
                             <Wallet className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                             <p className="text-lg font-bold text-gray-500 mb-2">No transactions yet</p>
-                            <p className="text-sm text-gray-400">Transactions will appear here when someone purchases your assets</p>
+                            <p className="text-sm text-gray-400">Transactions will appear here when someone purchases your assets or when you purchase licenses</p>
                         </div>
                     ) : (
                         <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
@@ -176,8 +190,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                                 <table className="w-full">
                                     <thead className="bg-gray-50 border-b border-gray-200">
                                         <tr>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
                                             <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Asset</th>
-                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Buyer</th>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Counterparty</th>
                                             <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
                                             <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">License</th>
                                             <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
@@ -187,6 +202,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                                     <tbody className="divide-y divide-gray-200">
                                         {transactions.map((tx) => (
                                             <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    {tx.type === 'received' ? (
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                            Received
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                            Sent
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         {tx.asset.thumbnailUrl ? (
@@ -219,10 +245,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <p className="text-sm font-mono text-gray-700">{formatAddress(tx.buyer.address)}</p>
+                                                    {tx.type === 'received' ? (
+                                                        <div>
+                                                            <p className="text-xs text-gray-500 mb-1">Buyer:</p>
+                                                            <p className="text-sm font-mono text-gray-700">{formatAddress(tx.buyer.address)}</p>
+                                                        </div>
+                                                    ) : (
+                                    <div>
+                                                            <p className="text-xs text-gray-500 mb-1">Seller:</p>
+                                                            <p className="text-sm font-mono text-gray-700">{formatAddress(tx.seller.address)}</p>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <p className="text-sm font-bold text-[#0F172A]">{tx.amount} USDC</p>
+                                                    <p className={`text-sm font-bold ${tx.type === 'received' ? 'text-green-600' : 'text-blue-600'}`}>
+                                                        {tx.type === 'received' ? '+' : '-'}{tx.amount} USDC
+                                                    </p>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
@@ -315,9 +353,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                     )}
                 </div>
 
-                {/* Purchased Assets Section */}
+                {/* Purchased Licenses Section */}
                 <div className="mb-12">
-                    <h3 className="text-2xl font-black text-[#0F172A] mb-6">Purchased</h3>
+                    <h3 className="text-2xl font-black text-[#0F172A] mb-6">Purchased Licenses</h3>
                     {loading ? (
                         <div className="flex items-center justify-center py-20">
                             <Loader className="w-8 h-8 animate-spin text-[#0033FF]" />
@@ -325,7 +363,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                     ) : purchasedAssets.length === 0 ? (
                         <div className="text-center py-20 bg-white border border-gray-100 rounded-2xl">
                             <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                            <p className="text-lg font-bold text-gray-500 mb-2">No purchased assets yet</p>
+                            <p className="text-lg font-bold text-gray-500 mb-2">No licenses purchased yet</p>
                             <p className="text-sm text-gray-400">Purchase licenses to access premium content</p>
                         </div>
                     ) : (
@@ -390,9 +428,49 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                                             </div>
                                         )}
                                         <button
-                                            onClick={() => {
-                                                const downloadUrl = purchase.asset.ipfsUrl;
-                                                window.open(downloadUrl, '_blank');
+                                            onClick={async () => {
+                                                if (!purchase.accessToken || !wallets[0]?.address) {
+                                                    console.error('Access token or wallet not available');
+                                                    return;
+                                                }
+
+                                                try {
+                                                    // Use downloadAsset function for secure download
+                                                    const { downloadAsset } = await import('@/lib/api-client');
+                                                    const downloadInfo = await downloadAsset(
+                                                        purchase.asset.id,
+                                                        wallets[0].address,
+                                                        purchase.accessToken
+                                                    );
+
+                                                    // Fetch the file as a blob
+                                                    const response = await fetch(getProxyIpfsUrl(downloadInfo.downloadUrl || purchase.asset.ipfsUrl), {
+                                                        method: 'GET',
+                                                    });
+
+                                                    if (!response.ok) {
+                                                        throw new Error('Failed to fetch file');
+                                                    }
+
+                                                    const blob = await response.blob();
+                                                    
+                                                    // Create a download link and trigger download
+                                                    const url = window.URL.createObjectURL(blob);
+                                                    const link = document.createElement('a');
+                                                    link.href = url;
+                                                    const fileExt = downloadInfo.fileType?.split('/')[1] || purchase.asset.fileType?.split('/')[1] || 'jpg';
+                                                    link.download = downloadInfo.fileName || `${purchase.asset.title || 'asset'}.${fileExt}`;
+                                                    document.body.appendChild(link);
+                                                    link.click();
+                                                    
+                                                    // Cleanup
+                                                    document.body.removeChild(link);
+                                                    window.URL.revokeObjectURL(url);
+                                                } catch (err: any) {
+                                                    console.error('Download error:', err);
+                                                    // Fallback to opening in new tab if download fails
+                                                    window.open(getProxyIpfsUrl(purchase.asset.ipfsUrl), '_blank');
+                                                }
                                             }}
                                             className="w-full mt-3 px-4 py-2 bg-[#0033FF] text-white font-bold rounded-lg hover:bg-blue-700 transition-colors text-xs flex items-center justify-center gap-2"
                                         >
@@ -400,9 +478,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onDisconnect }) => {
                                             Download
                                         </button>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
+                            </div>
+                        ))}
+                    </div>
                     )}
                 </div>
             </div>

@@ -310,17 +310,12 @@ export const UploadFlow: React.FC<UploadFlowProps> = ({ onComplete }) => {
                             <div className="grid gap-3">
                                 <div className="p-4 border-2 border-[#0033FF] bg-blue-50/30 rounded-xl cursor-pointer">
                                     <div className="flex justify-between mb-1">
-                                        <span className="text-sm font-black text-[#0F172A]">Commercial</span>
+                                        <span className="text-sm font-black text-[#0F172A]">Personal use</span>
                                         <Zap className="w-4 h-4 text-[#0033FF]" />
                                     </div>
-                                    <span className="text-xs text-gray-500 font-medium">Standard royalty model. 0.5 SOL</span>
+                                    <span className="text-xs text-gray-500 font-medium">Standard royalty model for personal use</span>
                                 </div>
-                                <div className="p-4 border border-gray-200 bg-white rounded-xl cursor-pointer hover:border-gray-400">
-                                    <div className="flex justify-between mb-1">
-                                        <span className="text-sm font-black text-gray-500">Exclusive</span>
-                                    </div>
-                                    <span className="text-xs text-gray-400 font-medium">Full ownership transfer.</span>
-                                </div>
+                              
                             </div>
                         </div>
                     </div>

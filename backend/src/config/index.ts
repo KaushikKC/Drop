@@ -13,6 +13,10 @@ export const config = {
     usdcTokenAddress: process.env.USDC_TOKEN_ADDRESS || '0x98dC0e28942A1475FA1923b6415E2783843F68CD', // Default to MockUSDC on Base Sepolia
     privateKey: process.env.PRIVATE_KEY || '',
   },
+  platform: {
+    feePercentage: parseFloat(process.env.PLATFORM_FEE_PERCENTAGE || '5'), // 5% platform fee
+    walletAddress: process.env.PLATFORM_WALLET_ADDRESS || '', // Platform wallet address
+  },
   storyProtocol: {
     rpcUrl: process.env.STORY_PROTOCOL_RPC_URL || process.env.ETHEREUM_RPC_URL || '',
     chainId: process.env.STORY_PROTOCOL_CHAIN_ID || 'aeneid', // "aeneid" for testnet, "sonic" for mainnet

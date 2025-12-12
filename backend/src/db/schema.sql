@@ -48,8 +48,13 @@ CREATE TABLE IF NOT EXISTS payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     asset_id UUID NOT NULL REFERENCES assets(id),
     payer_address VARCHAR(42) NOT NULL,
-    amount_wei BIGINT NOT NULL,
-    transaction_hash VARCHAR(66) NOT NULL UNIQUE,
+    amount_wei BIGINT NOT NULL, -- Total amount paid by buyer
+    creator_amount_wei BIGINT NOT NULL, -- Amount received by creator (95%)
+    platform_fee_wei BIGINT NOT NULL, -- Platform fee (5%)
+    platform_fee_percentage DECIMAL(5,2) DEFAULT 5.00, -- Platform fee percentage
+    platform_wallet_address VARCHAR(42), -- Platform wallet that received the fee
+    platform_transaction_hash VARCHAR(66), -- Transaction hash for platform fee payment
+    transaction_hash VARCHAR(66) NOT NULL UNIQUE, -- Main transaction hash (creator payment)
     block_number BIGINT,
     unlock_layer_id UUID REFERENCES unlock_layers(id), -- Which layer was unlocked
     payment_request_token VARCHAR(255),

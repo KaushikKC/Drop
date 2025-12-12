@@ -8,6 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
+    "migrate:platform-fee": "tsx src/db/run-migration.ts",
     "test": "jest"
   },
   "keywords": [
