@@ -72,7 +72,16 @@ const App: React.FC = () => {
               },
               // Use preview URL (watermarked) for gallery, full quality after payment
               // Convert IPFS URLs to use proxy to bypass CORS
-              imageUrl: convertIpfsUrl(item.previewUrl || item.thumbnailUrl || item.thumbnail_ipfs_url || item.thumbnail_url || ''),
+              // Fallback to full IPFS URL if thumbnail is not available
+              imageUrl: convertIpfsUrl(
+                item.previewUrl || 
+                item.thumbnailUrl || 
+                item.thumbnail_ipfs_url || 
+                item.thumbnail_url || 
+                item.ipfsUrl || 
+                item.ipfs_url || 
+                ''
+              ),
               previewUrl: convertIpfsUrl(item.previewUrl || item.thumbnailUrl || item.thumbnail_ipfs_url || ''),
               fullQualityUrl: convertIpfsUrl(item.ipfsUrl || item.ipfs_url || ''), // Full quality (only after payment)
               width: item.width || 800,
@@ -132,7 +141,7 @@ const App: React.FC = () => {
   const handlePurchase = (tier: any) => {
     setTimeout(() => {
         setSelectedAsset(null);
-        triggerToast(`Success: ${tier.label} Purchased`);
+        triggerToast(`Successfully Purchased`);
     }, 500);
   };
 

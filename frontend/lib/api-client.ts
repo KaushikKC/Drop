@@ -5,6 +5,41 @@
 // Backend API (Express server on port 3001)
 const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
+// Royalty Token Interfaces
+export interface RoyaltyToken {
+  id: string;
+  assetId: string;
+  assetTitle?: string;
+  ipId: string;
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenName: string;
+  totalSupply: string;
+  creatorAddress: string;
+  transactionHash?: string;
+  createdAt: string;
+  holdersCount: number;
+  totalRevenue: string;
+}
+
+export interface RoyaltyHolding {
+  holderAddress: string;
+  balance: string;
+  percentage: number;
+  acquiredAt: string;
+}
+
+export interface RoyaltyDistribution {
+  id: string;
+  amount: string;
+  currency: string;
+  sourceIPId: string;
+  sourceAssetId?: string;
+  sourceAssetTitle?: string;
+  transactionHash: string;
+  distributedAt: string;
+}
+
 // Next.js API routes (same origin as frontend)
 const getNextApiUrl = () => {
   if (typeof window !== 'undefined') {
@@ -349,6 +384,210 @@ export async function getCreatorTransactions(walletAddress: string, limit: numbe
 
   if (!response.ok) {
     throw new Error(`Failed to fetch transactions: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+// ========== ROYALTY TOKEN API FUNCTIONS ==========
+
+// Create royalty token for an asset
+export async function createRoyaltyToken(assetId: string): Promise<RoyaltyToken> {
+  const response = await fetch(`${BACKEND_API_URL}/api/royalty/create/${assetId}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to create royalty token' }));
+    throw new Error(error.error || error.message || 'Failed to create royalty token');
+  }
+
+  return response.json();
+}
+
+// Get royalty token info for an asset
+export async function getRoyaltyToken(assetId: string): Promise<RoyaltyToken> {
+  const response = await fetch(`${BACKEND_API_URL}/api/royalty/${assetId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null as any; // Token doesn't exist yet
+    }
+    throw new Error(`Failed to fetch royalty token: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+// Get royalty token holdings
+export async function getRoyaltyHoldings(assetId: string): Promise<{
+  tokenId: string;
+  assetId: string;
+  holdings: RoyaltyHolding[];
+  totalHolders: number;
+}> {
+  const response = await fetch(`${BACKEND_API_URL}/api/royalty/${assetId}/holdings`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch holdings: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+// Get royalty revenue history
+export async function getRoyaltyRevenue(assetId: string, limit: number = 50, offset: number = 0): Promise<{
+  tokenId: string;
+  assetId: string;
+  totalRevenue: string;
+  totalDistributions: number;
+  distributions: RoyaltyDistribution[];
+  pagination: {
+    limit: number;
+    offset: number;
+    total: number;
+  };
+}> {
+  const response = await fetch(
+    `${BACKEND_API_URL}/api/royalty/${assetId}/revenue?limit=${limit}&offset=${offset}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch revenue: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+// Transfer royalty tokens
+export async function transferRoyaltyTokens(
+  assetId: string,
+  from: string,
+  to: string,
+  amount: string
+): Promise<{
+  success: boolean;
+  from: string;
+  to: string;
+  amount: string;
+  transactionHash: string;
+  senderNewBalance: string;
+  recipientNewBalance: string;
+}> {
+  const response = await fetch(`${BACKEND_API_URL}/api/royalty/${assetId}/transfer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from, to, amount }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Transfer failed' }));
+    throw new Error(error.error || error.message || 'Transfer failed');
+  }
+
+  return response.json();
+}
+
+// ========== DERIVATIVE WORKS API FUNCTIONS ==========
+
+export interface DerivativeRegistration {
+  parentAssetId: string;
+  derivedFile: File | string; // File object or base64 string
+  derivedFileName: string;
+  derivationType: 'remix' | 'edit' | 'enhancement' | 'composite';
+  title: string;
+  description?: string;
+  creatorAddress: string;
+  revenueSplitPercentage?: number; // Default 10%
+}
+
+export interface DerivativeResult {
+  derivedAssetId: string;
+  derivedAsset: any;
+  storyDerivativeIPId: string;
+  storyLicenseId: string;
+  revenueSplitPercentage: number;
+}
+
+// Register a derivative work
+export async function registerDerivative(
+  registration: DerivativeRegistration
+): Promise<DerivativeResult> {
+  // Convert file to base64 if it's a File object
+  let fileData: string;
+  if (registration.derivedFile instanceof File) {
+    const arrayBuffer = await registration.derivedFile.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    fileData = `data:${registration.derivedFile.type};base64,${buffer.toString('base64')}`;
+  } else {
+    fileData = registration.derivedFile; // Assume it's already base64
+  }
+
+  const response = await fetch(`${BACKEND_API_URL}/api/derivative/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      ...registration,
+      derivedFile: fileData,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Derivative registration failed' }));
+    throw new Error(error.error || error.message || 'Derivative registration failed');
+  }
+
+  return response.json();
+}
+
+// Get all derivatives of an asset
+export async function getDerivatives(assetId: string): Promise<{
+  derivatives: Array<{
+    id: string;
+    parent_asset_id: string;
+    derived_asset_id: string;
+    derivation_type: string;
+    story_derivative_ip_id: string;
+    story_derivative_license_id: string;
+    revenue_split_percentage: number;
+    created_at: string;
+    title: string;
+    ipfs_url: string;
+    thumbnail_ipfs_url?: string;
+  }>;
+}> {
+  const response = await fetch(`${BACKEND_API_URL}/api/derivative/${assetId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch derivatives: ${response.statusText}`);
   }
 
   return response.json();

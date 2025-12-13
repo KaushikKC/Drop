@@ -1,13 +1,14 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { X, Share2, Shield, Heart, Check, Box, Cpu, Download, AlertCircle, Loader, Copy } from 'lucide-react';
+import { X, Share2, Shield, Heart, Check, Box, Cpu, Download, AlertCircle, Loader, Copy, Sparkles } from 'lucide-react';
 import { Asset, PriceTier } from '../types';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { getAsset, verifyPayment, downloadAsset } from '@/lib/api-client';
+import { getAsset, verifyPayment, downloadAsset, getDerivatives } from '@/lib/api-client';
 import { payAndVerify } from '@/lib/payment';
 import { ethers } from 'ethers';
 import Image from 'next/image';
 import { getProxyIpfsUrl } from '@/lib/ipfs-utils';
+import { DerivativeModal } from './DerivativeModal';
 
 interface AssetModalProps {
     asset: Asset;
@@ -27,6 +28,27 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
     const [paymentChallenge, setPaymentChallenge] = useState<any>(null);
     const [licenseInfo, setLicenseInfo] = useState<any>(null); // Store license info after purchase
     const [downloading, setDownloading] = useState(false);
+    const [showDerivativeModal, setShowDerivativeModal] = useState(false);
+    const [derivatives, setDerivatives] = useState<any[]>([]);
+    const [loadingDerivatives, setLoadingDerivatives] = useState(false);
+
+    // Fetch derivatives when modal opens
+    useEffect(() => {
+        const fetchDerivatives = async () => {
+            if (asset.story_ip_id || asset.ipId) {
+                setLoadingDerivatives(true);
+                try {
+                    const result = await getDerivatives(asset.id);
+                    setDerivatives(result.derivatives || []);
+                } catch (error) {
+                    console.error('Failed to fetch derivatives:', error);
+                } finally {
+                    setLoadingDerivatives(false);
+                }
+            }
+        };
+        fetchDerivatives();
+    }, [asset.id, asset.story_ip_id, asset.ipId]);
 
     // Check if user has access when modal opens
     useEffect(() => {
@@ -303,6 +325,70 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                                         Opted-in for generative training. License holders earn programmatic royalties from derivative models.
                                     </p>
                                 </div>
+
+                                {/* Derivatives Section */}
+                                {(asset.story_ip_id || asset.ipId) && (
+                                    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-sm font-bold text-[#0F172A] flex items-center gap-2">
+                                                <Sparkles className="w-4 h-4 text-[#0033FF]" />
+                                                Derivatives ({derivatives.length})
+                                            </h3>
+                                            {authenticated && wallets[0]?.address && (
+                                                <button
+                                                    onClick={() => setShowDerivativeModal(true)}
+                                                    className="px-3 py-1.5 bg-purple-500 text-white font-bold rounded-lg hover:bg-purple-600 transition-colors text-xs flex items-center gap-1.5"
+                                                >
+                                                    <Sparkles className="w-3 h-3" />
+                                                    Create Remix
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {loadingDerivatives ? (
+                                            <div className="flex items-center justify-center py-4">
+                                                <Loader className="w-5 h-5 animate-spin text-[#0033FF]" />
+                                            </div>
+                                        ) : derivatives.length === 0 ? (
+                                            <div className="text-center py-6 bg-gray-50 rounded-lg">
+                                                <Sparkles className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                                <p className="text-xs text-gray-500 font-medium">No derivatives yet</p>
+                                                <p className="text-[10px] text-gray-400 mt-1">Be the first to create a remix!</p>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {derivatives.map((derivative) => (
+                                                    <div
+                                                        key={derivative.id}
+                                                        className="bg-gray-50 rounded-lg overflow-hidden hover:shadow-md transition-shadow cursor-pointer border border-gray-200"
+                                                        onClick={() => {
+                                                            onClose();
+                                                            window.location.href = `/?asset=${derivative.derived_asset_id}`;
+                                                        }}
+                                                    >
+                                                        {derivative.thumbnail_ipfs_url ? (
+                                                            <Image
+                                                                src={getProxyIpfsUrl(derivative.thumbnail_ipfs_url)}
+                                                                alt={derivative.title}
+                                                                width={150}
+                                                                height={150}
+                                                                className="w-full h-24 object-cover"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-full h-24 bg-gray-200 flex items-center justify-center">
+                                                                <Box className="w-6 h-6 text-gray-400" />
+                                                            </div>
+                                                        )}
+                                                        <div className="p-2">
+                                                            <p className="text-[10px] font-bold text-[#0F172A] truncate">{derivative.title}</p>
+                                                            <p className="text-[9px] text-gray-500 mt-0.5 capitalize">{derivative.derivation_type}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -490,6 +576,21 @@ export const AssetModal: React.FC<AssetModalProps> = ({ asset, onClose, onPurcha
                     </div>
                 </div>
             </div>
+
+            {/* Derivative Creation Modal */}
+            {showDerivativeModal && (
+                <DerivativeModal
+                    parentAsset={asset}
+                    onClose={() => setShowDerivativeModal(false)}
+                    onSuccess={(derivativeId) => {
+                        // Refresh derivatives list
+                        getDerivatives(asset.id).then(result => {
+                            setDerivatives(result.derivatives || []);
+                        });
+                        setShowDerivativeModal(false);
+                    }}
+                />
+            )}
         </div>
     );
 };

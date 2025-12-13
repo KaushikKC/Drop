@@ -19,17 +19,18 @@ export interface PriceTier {
     id: string;
     title: string;
     creator: Creator;
-    imageUrl: string; // Preview URL (watermarked) for gallery
-    previewUrl?: string; // Watermarked preview URL
-    fullQualityUrl?: string; // Full quality URL (only after payment)
+    imageUrl: string; 
+    previewUrl?: string; 
+    fullQualityUrl?: string; 
     width: number;
     height: number;
     mimeType: string;
     cid: string;
     ipId: string;
+    story_ip_id?: string; 
     fingerprint: string;
     hash: string;
-    authScore: number; // 0 to 1
+    authScore: number; 
     tags: string[];
     likes: number;
     views: number;

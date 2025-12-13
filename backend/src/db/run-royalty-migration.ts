@@ -41,34 +41,84 @@ async function runRoyaltyMigration() {
         return;
       }
       
-      // Split by semicolons and execute each statement
-      const statements = migrationSQL
+      // Remove comments and split by semicolons
+      const lines = migrationSQL.split('\n');
+      const cleanedLines = lines
+        .map(line => {
+          const commentIndex = line.indexOf('--');
+          return commentIndex >= 0 ? line.substring(0, commentIndex) : line;
+        })
+        .join('\n');
+      
+      // Split by semicolons, but be careful with CREATE TABLE statements
+      const statements = cleanedLines
         .split(';')
         .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
+        .filter(s => s.length > 0);
       
       logger.info(`Found ${statements.length} statements to execute`);
       
-      for (let i = 0; i < statements.length; i++) {
-        const statement = statements[i];
-        if (statement.trim()) {
-          try {
-            const result = await client.query(statement);
-            logger.info(`✓ [${i + 1}/${statements.length}] Executed: ${statement.substring(0, 80)}...`);
-            if (result.rowCount !== undefined) {
-              logger.debug(`   Rows affected: ${result.rowCount}`);
-            }
-          } catch (error: any) {
-            // Ignore "already exists" errors
-            if (error.code === '42P07' || // table already exists
-                error.code === '42710' || // duplicate object
-                error.message.includes('already exists')) {
-              logger.info(`⊘ [${i + 1}/${statements.length}] Skipped (already exists)`);
-              continue;
-            }
-            logger.error(`✗ [${i + 1}/${statements.length}] Error: ${error.message}`);
-            throw error;
+      // Separate CREATE TABLE and CREATE INDEX statements
+      const tableStatements: string[] = [];
+      const indexStatements: string[] = [];
+      
+      for (const statement of statements) {
+        if (statement.toUpperCase().startsWith('CREATE TABLE')) {
+          tableStatements.push(statement);
+        } else if (statement.toUpperCase().startsWith('CREATE INDEX')) {
+          indexStatements.push(statement);
+        } else {
+          // Other statements (like CREATE EXTENSION, etc.)
+          tableStatements.push(statement);
+        }
+      }
+      
+      // Execute table statements first
+      let statementIndex = 0;
+      for (const statement of tableStatements) {
+        statementIndex++;
+        try {
+          const result = await client.query(statement);
+          logger.info(`✓ [${statementIndex}/${statements.length}] Executed: ${statement.substring(0, 80).replace(/\s+/g, ' ')}...`);
+          if (result.rowCount !== undefined) {
+            logger.debug(`   Rows affected: ${result.rowCount}`);
           }
+        } catch (error: any) {
+          // Ignore "already exists" errors
+          if (error.code === '42P07' || // table already exists
+              error.code === '42710' || // duplicate object
+              error.code === '42P16' || // column already exists
+              error.message.includes('already exists')) {
+            logger.info(`⊘ [${statementIndex}/${statements.length}] Skipped (already exists)`);
+            continue;
+          }
+          logger.error(`✗ [${statementIndex}/${statements.length}] Error: ${error.message}`);
+          logger.error(`   Statement: ${statement.substring(0, 200)}`);
+          throw error;
+        }
+      }
+      
+      // Then execute index statements
+      for (const statement of indexStatements) {
+        statementIndex++;
+        try {
+          const result = await client.query(statement);
+          logger.info(`✓ [${statementIndex}/${statements.length}] Executed: ${statement.substring(0, 80).replace(/\s+/g, ' ')}...`);
+          if (result.rowCount !== undefined) {
+            logger.debug(`   Rows affected: ${result.rowCount}`);
+          }
+        } catch (error: any) {
+          // Ignore "already exists" errors for indexes too
+          if (error.code === '42P07' || // table already exists
+              error.code === '42710' || // duplicate object
+              error.code === '42P16' || // column already exists
+              error.message.includes('already exists')) {
+            logger.info(`⊘ [${statementIndex}/${statements.length}] Skipped (already exists)`);
+            continue;
+          }
+          logger.error(`✗ [${statementIndex}/${statements.length}] Error: ${error.message}`);
+          logger.error(`   Statement: ${statement.substring(0, 200)}`);
+          throw error;
         }
       }
       

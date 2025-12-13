@@ -53,8 +53,45 @@ router.post('/register', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid file format' });
     }
 
-    // Upload derived work to IPFS
+    // Generate asset ID first (needed for thumbnail filename)
     const derivedAssetId = uuidv4();
+
+    // Generate perceptual hash for fingerprint
+    const { generatePerceptualHash, generateImageHash } = await import('../services/image-processing');
+    let perceptualHash: string | undefined;
+    let imageHash: string | undefined;
+    
+    try {
+      perceptualHash = await generatePerceptualHash(fileBuffer);
+      imageHash = generateImageHash(fileBuffer);
+    } catch (hashError) {
+      console.error('Hash generation failed for derivative:', hashError);
+      // Continue without hash - don't block upload
+    }
+
+    // Generate thumbnail for derivative
+    let thumbnailBuffer: Buffer | null = null;
+    let thumbnailCid: string | undefined;
+    let thumbnailUrl: string | undefined;
+
+    try {
+      const sharp = (await import('sharp')).default;
+      thumbnailBuffer = await sharp(fileBuffer)
+        .resize(400, 400, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 70 })
+        .toBuffer();
+
+      const thumbResult = await uploadToIPFS(
+        thumbnailBuffer,
+        `thumb_${derivedAssetId}_${derivedFileName || 'derived'}`
+      );
+      thumbnailCid = thumbResult.cid;
+      thumbnailUrl = thumbResult.url;
+    } catch (thumbError) {
+      console.error('Thumbnail generation failed for derivative:', thumbError);
+    }
+
+    // Upload derived work to IPFS
     const ipfsResult = await uploadToIPFS(
       fileBuffer,
       `${derivedAssetId}_${derivedFileName || 'derived'}`
@@ -63,19 +100,33 @@ router.post('/register', async (req: Request, res: Response) => {
     // Register derived work on Story Protocol
     const derivativeResult = await storyProtocolService.registerDerivative({
       parentIPId: parentAsset.story_ip_id,
-      derivedIPId: `derived_${derivedAssetId}`, // Placeholder - would be actual IP ID from Story
+      derivedIPId: `derived_${derivedAssetId}`, 
       derivationType,
       revenueSplit: revenueSplitPercentage,
+      derivedMetadata: {
+        name: title || `Derived: ${parentAsset.title}`,
+        description: description || `Derived from ${parentAsset.title}`,
+        mediaUrl: ipfsResult.url,
+        thumbnailUrl: ipfsResult.url, 
+        mediaType: 'image/jpeg', 
+        creatorAddress: creatorAddress,
+      },
     });
 
     // Create derived asset record
     const derivedAsset = await transaction(async (client) => {
+      // Truncate perceptual hash to 64 characters if it's longer (database constraint)
+      const truncatedPerceptualHash = perceptualHash 
+        ? (perceptualHash.length > 64 ? perceptualHash.substring(0, 64) : perceptualHash)
+        : null;
+
       // Insert derived asset
       const assetResult = await client.query(
         `INSERT INTO assets (
           id, title, description, price_wei, currency, recipient_address, creator_address,
-          ipfs_cid, ipfs_url, story_ip_id, story_registered
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          ipfs_cid, ipfs_url, thumbnail_ipfs_cid, thumbnail_ipfs_url,
+          story_ip_id, story_registered, perceptual_hash, file_type, file_size
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *`,
         [
           derivedAssetId,
@@ -87,8 +138,13 @@ router.post('/register', async (req: Request, res: Response) => {
           creatorAddress,
           ipfsResult.cid,
           ipfsResult.url,
+          thumbnailCid,
+          thumbnailUrl,
           derivativeResult.derivativeIPId,
           true,
+          truncatedPerceptualHash,
+          'image/jpeg', // Default, could detect from file
+          fileBuffer.length,
         ]
       );
 

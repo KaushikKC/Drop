@@ -24,14 +24,20 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({ assets, onAssetClick }
                 
                 {/* Image */}
                 <div className="relative overflow-hidden">
-                    <Image 
-                      width={500}
-                      height={500}
-                      src={getProxyIpfsUrl(asset.imageUrl)} 
-                      alt={asset.title} 
-                      loading="lazy"
-                      className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105"
-                    />
+                    {asset.imageUrl ? (
+                      <Image 
+                        width={500}
+                        height={500}
+                        src={getProxyIpfsUrl(asset.imageUrl)} 
+                        alt={asset.title} 
+                        loading="lazy"
+                        className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="w-full h-64 bg-gray-200 flex items-center justify-center">
+                        <span className="text-gray-400 text-sm">No preview available</span>
+                      </div>
+                    )}
                     
                     {/* Hover Overlay */}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">

@@ -94,11 +94,14 @@ router.get('/:address/transactions', async (req: Request, res: Response) => {
     const offset = parseInt(req.query.offset as string) || 0;
 
     // Get payments received (as creator) - someone bought your asset
+    // Use creator_amount_wei (what creator actually receives after platform fee)
     const receivedTransactions = await query(
       `SELECT 
         p.id,
         p.transaction_hash,
-        p.amount_wei,
+        COALESCE(p.creator_amount_wei, p.amount_wei) as amount_wei,
+        p.creator_amount_wei,
+        p.amount_wei as total_amount_wei,
         p.block_number,
         p.verified,
         p.verified_at,
@@ -116,11 +119,15 @@ router.get('/:address/transactions', async (req: Request, res: Response) => {
       FROM payments p
       JOIN assets a ON p.asset_id = a.id
       LEFT JOIN licenses l ON p.id = l.payment_id
-      WHERE a.recipient_address = $1 AND p.verified = true`,
-      [address.toLowerCase()]
+      WHERE LOWER(a.recipient_address) = LOWER($1) AND p.verified = true
+      ORDER BY p.created_at DESC`,
+      [address]
     );
+    
+    console.log('✅ Received transactions:', receivedTransactions.length);
 
     // Get payments sent (as buyer) - you bought someone else's asset
+    // Use amount_wei (total amount you paid)
     const sentTransactions = await query(
       `SELECT 
         p.id,
@@ -143,9 +150,12 @@ router.get('/:address/transactions', async (req: Request, res: Response) => {
       FROM payments p
       JOIN assets a ON p.asset_id = a.id
       LEFT JOIN licenses l ON p.id = l.payment_id
-      WHERE p.payer_address = $1 AND p.verified = true`,
-      [address.toLowerCase()]
+      WHERE LOWER(p.payer_address) = LOWER($1) AND p.verified = true
+      ORDER BY p.created_at DESC`,
+      [address]
     );
+    
+    console.log('✅ Sent transactions:', sentTransactions.length);
 
     // Combine and sort by date
     const allTransactions = [...receivedTransactions, ...sentTransactions]
@@ -153,6 +163,13 @@ router.get('/:address/transactions', async (req: Request, res: Response) => {
       .slice(offset, offset + limit);
 
     const total = receivedTransactions.length + sentTransactions.length;
+    
+    console.log('📊 Transaction summary:', {
+      total,
+      received: receivedTransactions.length,
+      sent: sentTransactions.length,
+      address: address.toLowerCase(),
+    });
 
     res.json({
       transactions: allTransactions.map((tx: any) => ({
