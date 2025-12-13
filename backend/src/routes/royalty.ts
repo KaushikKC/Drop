@@ -1,10 +1,10 @@
-import express, { Request, Response } from 'express';
-import { query, queryOne } from '../db';
-import { storyProtocolService } from '../services/story-protocol';
-import { parseEther } from '../services/ethereum';
-import pino from 'pino';
+import express, { Request, Response } from "express";
+import { query, queryOne } from "../db";
+import { storyProtocolService } from "../services/story-protocol";
+import { parseEther } from "../services/ethereum";
+import pino from "pino";
 
-const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 const router = express.Router();
 
 interface RoyaltyTokenRow {
@@ -26,10 +26,11 @@ interface RoyaltyHoldingRow {
   holder_address: string;
   balance: string;
   percentage: number;
+  acquired_at?: Date | string;
 }
 
 // POST /api/royalty/create/:assetId - Create royalty token for an asset
-router.post('/create/:assetId', async (req: Request, res: Response) => {
+router.post("/create/:assetId", async (req: Request, res: Response) => {
   try {
     const { assetId } = req.params;
 
@@ -40,24 +41,25 @@ router.post('/create/:assetId', async (req: Request, res: Response) => {
       story_ip_id: string;
       creator_address: string;
     }>(
-      'SELECT id, title, story_ip_id, creator_address FROM assets WHERE id = $1',
+      "SELECT id, title, story_ip_id, creator_address FROM assets WHERE id = $1",
       [assetId]
     );
 
     if (!asset) {
-      return res.status(404).json({ error: 'Asset not found' });
+      return res.status(404).json({ error: "Asset not found" });
     }
 
     if (!asset.story_ip_id) {
-      return res.status(400).json({ 
-        error: 'Asset must be registered on Story Protocol first',
-        message: 'Register the asset on Story Protocol before creating royalty token'
+      return res.status(400).json({
+        error: "Asset must be registered on Story Protocol first",
+        message:
+          "Register the asset on Story Protocol before creating royalty token",
       });
     }
 
     // Check if royalty token already exists
     const existing = await queryOne<RoyaltyTokenRow>(
-      'SELECT * FROM royalty_tokens WHERE asset_id = $1',
+      "SELECT * FROM royalty_tokens WHERE asset_id = $1",
       [assetId]
     );
 
@@ -68,7 +70,7 @@ router.post('/create/:assetId', async (req: Request, res: Response) => {
         tokenName: existing.token_name,
         totalSupply: existing.total_supply,
         ipId: existing.ip_id,
-        message: 'Royalty token already exists',
+        message: "Royalty token already exists",
         alreadyExists: true,
       });
     }
@@ -78,7 +80,7 @@ router.post('/create/:assetId', async (req: Request, res: Response) => {
       ipId: asset.story_ip_id,
       assetName: asset.title,
       creatorAddress: asset.creator_address,
-      totalSupply: parseEther('1000000'), // 1M tokens
+      totalSupply: parseEther("1000000"), // 1M tokens
     });
 
     // Store in database
@@ -108,14 +110,14 @@ router.post('/create/:assetId', async (req: Request, res: Response) => {
       ON CONFLICT (token_id, holder_address) DO UPDATE
       SET balance = EXCLUDED.balance, percentage = EXCLUDED.percentage`,
       [
-        result.rows[0].id,
+        result[0].id,
         asset.creator_address.toLowerCase(),
         royaltyToken.totalSupply.toString(),
         100.0, // Creator owns 100% initially
       ]
     );
 
-    logger.info('Royalty token created', {
+    logger.info("Royalty token created", {
       assetId,
       ipId: asset.story_ip_id,
       tokenAddress: royaltyToken.tokenAddress,
@@ -131,16 +133,16 @@ router.post('/create/:assetId', async (req: Request, res: Response) => {
       txHash: royaltyToken.txHash,
     });
   } catch (error: any) {
-    logger.error('Royalty token creation error:', error);
+    logger.error("Royalty token creation error:", error);
     res.status(500).json({
-      error: 'Failed to create royalty token',
-      message: error.message || 'Unknown error',
+      error: "Failed to create royalty token",
+      message: error.message || "Unknown error",
     });
   }
 });
 
 // GET /api/royalty/:assetId - Get royalty token info for an asset
-router.get('/:assetId', async (req: Request, res: Response) => {
+router.get("/:assetId", async (req: Request, res: Response) => {
   try {
     const { assetId } = req.params;
 
@@ -153,12 +155,14 @@ router.get('/:assetId', async (req: Request, res: Response) => {
     );
 
     if (!token) {
-      return res.status(404).json({ error: 'Royalty token not found for this asset' });
+      return res
+        .status(404)
+        .json({ error: "Royalty token not found for this asset" });
     }
 
     // Get total holdings count
     const holdingsCount = await queryOne<{ count: string }>(
-      'SELECT COUNT(*) as count FROM royalty_token_holdings WHERE token_id = $1',
+      "SELECT COUNT(*) as count FROM royalty_token_holdings WHERE token_id = $1",
       [token.id]
     );
 
@@ -182,30 +186,30 @@ router.get('/:assetId', async (req: Request, res: Response) => {
       creatorAddress: token.creator_address,
       transactionHash: token.transaction_hash,
       createdAt: token.created_at,
-      holdersCount: parseInt(holdingsCount?.count || '0'),
-      totalRevenue: revenueResult?.total || '0',
+      holdersCount: parseInt(holdingsCount?.count || "0"),
+      totalRevenue: revenueResult?.total || "0",
     });
   } catch (error: any) {
-    logger.error('Get royalty token error:', error);
+    logger.error("Get royalty token error:", error);
     res.status(500).json({
-      error: 'Failed to get royalty token',
-      message: error.message || 'Unknown error',
+      error: "Failed to get royalty token",
+      message: error.message || "Unknown error",
     });
   }
 });
 
 // GET /api/royalty/:assetId/holdings - Get token holders and balances
-router.get('/:assetId/holdings', async (req: Request, res: Response) => {
+router.get("/:assetId/holdings", async (req: Request, res: Response) => {
   try {
     const { assetId } = req.params;
 
     const token = await queryOne<RoyaltyTokenRow>(
-      'SELECT id FROM royalty_tokens WHERE asset_id = $1',
+      "SELECT id FROM royalty_tokens WHERE asset_id = $1",
       [assetId]
     );
 
     if (!token) {
-      return res.status(404).json({ error: 'Royalty token not found' });
+      return res.status(404).json({ error: "Royalty token not found" });
     }
 
     const holdings = await query<RoyaltyHoldingRow>(
@@ -219,7 +223,7 @@ router.get('/:assetId/holdings', async (req: Request, res: Response) => {
     res.json({
       tokenId: token.id,
       assetId,
-      holdings: holdings.map(h => ({
+      holdings: holdings.map((h) => ({
         holderAddress: h.holder_address,
         balance: h.balance,
         percentage: parseFloat(h.percentage.toString()),
@@ -228,28 +232,28 @@ router.get('/:assetId/holdings', async (req: Request, res: Response) => {
       totalHolders: holdings.length,
     });
   } catch (error: any) {
-    logger.error('Get holdings error:', error);
+    logger.error("Get holdings error:", error);
     res.status(500).json({
-      error: 'Failed to get holdings',
-      message: error.message || 'Unknown error',
+      error: "Failed to get holdings",
+      message: error.message || "Unknown error",
     });
   }
 });
 
 // GET /api/royalty/:assetId/revenue - Get royalty revenue history
-router.get('/:assetId/revenue', async (req: Request, res: Response) => {
+router.get("/:assetId/revenue", async (req: Request, res: Response) => {
   try {
     const { assetId } = req.params;
     const limit = parseInt(req.query.limit as string) || 50;
     const offset = parseInt(req.query.offset as string) || 0;
 
     const token = await queryOne<RoyaltyTokenRow>(
-      'SELECT id FROM royalty_tokens WHERE asset_id = $1',
+      "SELECT id FROM royalty_tokens WHERE asset_id = $1",
       [assetId]
     );
 
     if (!token) {
-      return res.status(404).json({ error: 'Royalty token not found' });
+      return res.status(404).json({ error: "Royalty token not found" });
     }
 
     const distributions = await query(
@@ -282,9 +286,9 @@ router.get('/:assetId/revenue', async (req: Request, res: Response) => {
     res.json({
       tokenId: token.id,
       assetId,
-      totalRevenue: totalResult?.total || '0',
-      totalDistributions: parseInt(totalResult?.count || '0'),
-      distributions: distributions.map(d => ({
+      totalRevenue: totalResult?.total || "0",
+      totalDistributions: parseInt(totalResult?.count || "0"),
+      distributions: distributions.map((d) => ({
         id: d.id,
         amount: d.amount_wei,
         currency: d.currency,
@@ -297,55 +301,55 @@ router.get('/:assetId/revenue', async (req: Request, res: Response) => {
       pagination: {
         limit,
         offset,
-        total: parseInt(totalResult?.count || '0'),
+        total: parseInt(totalResult?.count || "0"),
       },
     });
   } catch (error: any) {
-    logger.error('Get revenue error:', error);
+    logger.error("Get revenue error:", error);
     res.status(500).json({
-      error: 'Failed to get revenue',
-      message: error.message || 'Unknown error',
+      error: "Failed to get revenue",
+      message: error.message || "Unknown error",
     });
   }
 });
 
 // POST /api/royalty/:assetId/transfer - Transfer royalty tokens (fractional ownership)
-router.post('/:assetId/transfer', async (req: Request, res: Response) => {
+router.post("/:assetId/transfer", async (req: Request, res: Response) => {
   try {
     const { assetId } = req.params;
     const { from, to, amount } = req.body;
 
     if (!from || !to || !amount) {
-      return res.status(400).json({ 
-        error: 'Missing required fields',
-        required: ['from', 'to', 'amount']
+      return res.status(400).json({
+        error: "Missing required fields",
+        required: ["from", "to", "amount"],
       });
     }
 
     const token = await queryOne<RoyaltyTokenRow>(
-      'SELECT * FROM royalty_tokens WHERE asset_id = $1',
+      "SELECT * FROM royalty_tokens WHERE asset_id = $1",
       [assetId]
     );
 
     if (!token) {
-      return res.status(404).json({ error: 'Royalty token not found' });
+      return res.status(404).json({ error: "Royalty token not found" });
     }
 
     // Get sender's current balance
     const senderHolding = await queryOne<RoyaltyHoldingRow>(
-      'SELECT * FROM royalty_token_holdings WHERE token_id = $1 AND holder_address = $2',
+      "SELECT * FROM royalty_token_holdings WHERE token_id = $1 AND holder_address = $2",
       [token.id, from.toLowerCase()]
     );
 
     if (!senderHolding) {
-      return res.status(404).json({ error: 'Sender has no tokens' });
+      return res.status(404).json({ error: "Sender has no tokens" });
     }
 
     const transferAmount = BigInt(amount);
     const senderBalance = BigInt(senderHolding.balance);
 
     if (transferAmount > senderBalance) {
-      return res.status(400).json({ error: 'Insufficient balance' });
+      return res.status(400).json({ error: "Insufficient balance" });
     }
 
     // Calculate new percentages
@@ -353,8 +357,10 @@ router.post('/:assetId/transfer', async (req: Request, res: Response) => {
     const senderNewBalance = senderBalance - transferAmount;
     const recipientNewBalance = transferAmount;
 
-    const senderNewPercentage = (Number(senderNewBalance) / Number(totalSupply)) * 100;
-    const recipientNewPercentage = (Number(recipientNewBalance) / Number(totalSupply)) * 100;
+    const senderNewPercentage =
+      (Number(senderNewBalance) / Number(totalSupply)) * 100;
+    const recipientNewPercentage =
+      (Number(recipientNewBalance) / Number(totalSupply)) * 100;
 
     // Transfer tokens on-chain (if using actual token contracts)
     const transferResult = await storyProtocolService.transferRoyaltyTokens({
@@ -364,7 +370,7 @@ router.post('/:assetId/transfer', async (req: Request, res: Response) => {
     });
 
     // Update database
-    await query('BEGIN');
+    await query("BEGIN");
 
     try {
       // Update sender
@@ -372,7 +378,12 @@ router.post('/:assetId/transfer', async (req: Request, res: Response) => {
         `UPDATE royalty_token_holdings
          SET balance = $1, percentage = $2, updated_at = CURRENT_TIMESTAMP
          WHERE token_id = $3 AND holder_address = $4`,
-        [senderNewBalance.toString(), senderNewPercentage, token.id, from.toLowerCase()]
+        [
+          senderNewBalance.toString(),
+          senderNewPercentage,
+          token.id,
+          from.toLowerCase(),
+        ]
       );
 
       // Update or create recipient
@@ -383,16 +394,21 @@ router.post('/:assetId/transfer', async (req: Request, res: Response) => {
          SET balance = royalty_token_holdings.balance + $3,
              percentage = (royalty_token_holdings.balance + $3)::DECIMAL / (SELECT total_supply FROM royalty_tokens WHERE id = $1)::DECIMAL * 100,
              updated_at = CURRENT_TIMESTAMP`,
-        [token.id, to.toLowerCase(), recipientNewBalance.toString(), recipientNewPercentage]
+        [
+          token.id,
+          to.toLowerCase(),
+          recipientNewBalance.toString(),
+          recipientNewPercentage,
+        ]
       );
 
-      await query('COMMIT');
+      await query("COMMIT");
     } catch (dbError) {
-      await query('ROLLBACK');
+      await query("ROLLBACK");
       throw dbError;
     }
 
-    logger.info('Royalty tokens transferred', {
+    logger.info("Royalty tokens transferred", {
       assetId,
       from,
       to,
@@ -410,27 +426,27 @@ router.post('/:assetId/transfer', async (req: Request, res: Response) => {
       recipientNewBalance: recipientNewBalance.toString(),
     });
   } catch (error: any) {
-    logger.error('Transfer error:', error);
+    logger.error("Transfer error:", error);
     res.status(500).json({
-      error: 'Failed to transfer tokens',
-      message: error.message || 'Unknown error',
+      error: "Failed to transfer tokens",
+      message: error.message || "Unknown error",
     });
   }
 });
 
 // GET /api/royalty/:assetId/distributions - Get distribution history with recipients
-router.get('/:assetId/distributions', async (req: Request, res: Response) => {
+router.get("/:assetId/distributions", async (req: Request, res: Response) => {
   try {
     const { assetId } = req.params;
     const limit = parseInt(req.query.limit as string) || 20;
 
     const token = await queryOne<RoyaltyTokenRow>(
-      'SELECT id FROM royalty_tokens WHERE asset_id = $1',
+      "SELECT id FROM royalty_tokens WHERE asset_id = $1",
       [assetId]
     );
 
     if (!token) {
-      return res.status(404).json({ error: 'Royalty token not found' });
+      return res.status(404).json({ error: "Royalty token not found" });
     }
 
     const distributions = await query(
@@ -461,7 +477,7 @@ router.get('/:assetId/distributions', async (req: Request, res: Response) => {
     );
 
     res.json({
-      distributions: distributions.map(d => ({
+      distributions: distributions.map((d) => ({
         id: d.id,
         amount: d.amount_wei,
         currency: d.currency,
@@ -472,13 +488,12 @@ router.get('/:assetId/distributions', async (req: Request, res: Response) => {
       })),
     });
   } catch (error: any) {
-    logger.error('Get distributions error:', error);
+    logger.error("Get distributions error:", error);
     res.status(500).json({
-      error: 'Failed to get distributions',
-      message: error.message || 'Unknown error',
+      error: "Failed to get distributions",
+      message: error.message || "Unknown error",
     });
   }
 });
 
 export default router;
-

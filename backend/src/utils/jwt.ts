@@ -1,5 +1,5 @@
-import jwt from 'jsonwebtoken';
-import { config } from '../config';
+import jwt, { SignOptions } from "jsonwebtoken";
+import { config } from "../config";
 
 export interface JWTPayload {
   assetId: string;
@@ -7,8 +7,11 @@ export interface JWTPayload {
   exp?: number;
 }
 
-export function signJwt(payload: JWTPayload, expiresIn: string = '5m'): string {
-  return jwt.sign(payload, config.jwt.secret, { expiresIn });
+export function signJwt(
+  payload: JWTPayload,
+  expiresIn: string | number = "5m"
+): string {
+  return jwt.sign(payload, config.jwt.secret, { expiresIn: expiresIn as any });
 }
 
 export function verifyJwt(token: string): JWTPayload | null {
@@ -18,4 +21,3 @@ export function verifyJwt(token: string): JWTPayload | null {
     return null;
   }
 }
-

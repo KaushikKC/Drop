@@ -1,15 +1,15 @@
-import { ethers } from 'ethers';
-import { config } from '../config';
-import pino from 'pino';
+import { ethers } from "ethers";
+import { config } from "../config";
+import pino from "pino";
 
-const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 
 // ERC20 ABI (minimal - just what we need)
 const ERC20_ABI = [
-  'function transfer(address to, uint256 amount) external returns (bool)',
-  'function balanceOf(address account) external view returns (uint256)',
-  'function decimals() external view returns (uint8)',
-  'event Transfer(address indexed from, address indexed to, uint256 value)',
+  "function transfer(address to, uint256 amount) external returns (bool)",
+  "function balanceOf(address account) external view returns (uint256)",
+  "function decimals() external view returns (uint8)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
 ];
 
 let provider: ethers.Provider | null = null;
@@ -46,17 +46,17 @@ export async function verifyERC20Transfer(
     const receipt = await provider.getTransactionReceipt(txHash);
 
     if (!receipt) {
-      return { valid: false, error: 'Transaction not found' };
+      return { valid: false, error: "Transaction not found" };
     }
 
     if (receipt.status !== 1) {
-      return { valid: false, error: 'Transaction failed' };
+      return { valid: false, error: "Transaction failed" };
     }
 
     // Get the transaction to see the actual transfer
     const tx = await provider.getTransaction(txHash);
     if (!tx) {
-      return { valid: false, error: 'Transaction details not found' };
+      return { valid: false, error: "Transaction details not found" };
     }
 
     // Create contract instance to parse logs
@@ -70,35 +70,58 @@ export async function verifyERC20Transfer(
     const transferEvents = receipt.logs
       .map((log) => {
         try {
-          return tokenContract.interface.parseLog(log);
+          const parsed = tokenContract.interface.parseLog(log);
+          if (parsed && parsed.name === "Transfer") {
+            const args = parsed.args as any;
+            if (
+              args &&
+              typeof args.from === "string" &&
+              typeof args.to === "string" &&
+              args.value !== undefined
+            ) {
+              return {
+                name: parsed.name,
+                args: {
+                  from: args.from as string,
+                  to: args.to as string,
+                  value: BigInt(args.value.toString()),
+                },
+              };
+            }
+          }
+          return null;
         } catch {
           return null;
         }
       })
-      .filter((parsed) => parsed && parsed.name === 'Transfer') as Array<{
-      name: string;
-      args: { from: string; to: string; value: bigint };
-    }>;
+      .filter(
+        (
+          event
+        ): event is {
+          name: string;
+          args: { from: string; to: string; value: bigint };
+        } => {
+          return event !== null;
+        }
+      );
 
     // Find transfer to expected recipient
     const relevantTransfer = transferEvents.find(
-      (event) =>
-        event.args.to.toLowerCase() === expectedRecipient.toLowerCase()
+      (event) => event.args.to.toLowerCase() === expectedRecipient.toLowerCase()
     );
 
     if (!relevantTransfer) {
       return {
         valid: false,
-        error: 'No transfer found to expected recipient',
+        error: "No transfer found to expected recipient",
       };
     }
 
     const { from, to, value } = relevantTransfer.args;
 
     // Verify amount matches (allow small tolerance for rounding)
-    const amountDiff = value > expectedAmount 
-      ? value - expectedAmount 
-      : expectedAmount - value;
+    const amountDiff =
+      value > expectedAmount ? value - expectedAmount : expectedAmount - value;
     const tolerance = expectedAmount / BigInt(10000); // 0.01% tolerance
 
     if (amountDiff > tolerance) {
@@ -118,10 +141,10 @@ export async function verifyERC20Transfer(
       amount: value,
     };
   } catch (error) {
-    logger.error('Error verifying ERC20 transfer:', error);
+    logger.error("Error verifying ERC20 transfer:", error);
     return {
       valid: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : "Unknown error",
     };
   }
 }
@@ -148,4 +171,3 @@ export function parseEther(amount: string, decimals: number = 18): bigint {
 export function formatEther(amount: bigint, decimals: number = 18): string {
   return ethers.formatUnits(amount, decimals);
 }
-
