@@ -1,5 +1,5 @@
 # Ignore everything
-
+.DS_Store
 
 # But track the backend, api, frontend, and sdk folders and their contents
 !backend/
