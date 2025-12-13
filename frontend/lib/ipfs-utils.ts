@@ -57,30 +57,33 @@ export function getProxyIpfsUrl(ipfsUrl: string): string {
  * Convert multiple IPFS URLs in an object
  */
 export function convertIpfsUrls<T extends Record<string, any>>(obj: T): T {
-  const converted = { ...obj };
+  const converted = { ...obj } as Record<string, any>;
 
   // Common IPFS URL fields
   const ipfsFields = [
-    'imageUrl',
-    'previewUrl',
-    'fullQualityUrl',
-    'thumbnailUrl',
-    'thumbnail_ipfs_url',
-    'ipfsUrl',
-    'ipfs_url',
-    'url',
+    "imageUrl",
+    "previewUrl",
+    "fullQualityUrl",
+    "thumbnailUrl",
+    "thumbnail_ipfs_url",
+    "ipfsUrl",
+    "ipfs_url",
+    "url",
   ];
 
   for (const field of ipfsFields) {
-    if (converted[field] && typeof converted[field] === 'string') {
+    if (converted[field] && typeof converted[field] === "string") {
       const url = converted[field] as string;
       // Check if it's an IPFS URL
-      if (url.includes('ipfs') || url.includes('gateway.pinata') || /^[Qmb][A-Za-z0-9]{40,}$/.test(url)) {
+      if (
+        url.includes("ipfs") ||
+        url.includes("gateway.pinata") ||
+        /^[Qmb][A-Za-z0-9]{40,}$/.test(url)
+      ) {
         converted[field] = getProxyIpfsUrl(url);
       }
     }
   }
 
-  return converted;
+  return converted as T;
 }
-
