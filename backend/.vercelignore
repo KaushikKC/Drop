@@ -13,3 +13,5 @@ jest.config.js
 jest.setup.js
 README.md
 LOCAL_POSTGRES_SETUP.md
+# Keep schema.sql - it's needed for database initialization
+!src/db/schema.sql

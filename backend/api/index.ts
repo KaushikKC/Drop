@@ -29,8 +29,40 @@ const logger = pino({
 // Initialize Express app
 const app = express();
 
+// CORS configuration - allow all origins in production, or specific frontend URL
+const corsOptions = {
+  origin: function (
+    origin: string | undefined,
+    callback: (err: Error | null, allow?: boolean) => void
+  ) {
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+
+    // In production, allow specific frontend domain or all origins
+    // You can restrict this to your frontend domain for better security
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      process.env.NEXT_PUBLIC_FRONTEND_URL,
+      "https://drop-ruby.vercel.app",
+      "http://localhost:3000",
+      "https://localhost:3000",
+    ].filter(Boolean);
+
+    // Allow if origin is in allowed list, or if no restrictions set (allow all)
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // Still allow in development, or if explicitly allowed
+      callback(null, true); // Change to callback(new Error('Not allowed by CORS')) for strict mode
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-payment", "X-Payment"],
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(pinoHttp({ logger }));

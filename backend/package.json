@@ -4,7 +4,7 @@
   "description": "drop Backend - Ethereum-based X402 payment protocol with Story Protocol integration",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp src/db/schema.sql dist/db/schema.sql || true",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
