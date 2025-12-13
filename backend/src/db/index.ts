@@ -12,11 +12,15 @@ export function getPool(): Pool {
       throw new Error("DATABASE_URL environment variable is not set");
     }
 
+    // Log connection attempt (without exposing full credentials)
+    const maskedUrl = databaseUrl.replace(/:[^:@]+@/, ":****@");
+    logger.info(`Connecting to database: ${maskedUrl}`);
+
     pool = new Pool({
       connectionString: databaseUrl,
       max: 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 10000, // Increased timeout for serverless
     });
 
     pool.on("error", (err) => {
@@ -118,7 +122,18 @@ export async function initDatabase(): Promise<void> {
         );
         return;
       } catch (connError: any) {
-        throw new Error(`Database connection failed: ${connError.message}`);
+        const errorMessage = connError.message || String(connError);
+        logger.error(
+          "Database connection test failed (schema file not found)",
+          {
+            message: errorMessage,
+            code: connError.code,
+          }
+        );
+        throw new Error(
+          `Database connection failed: ${errorMessage}\n` +
+            `Please verify DATABASE_URL is set correctly in Vercel environment variables.`
+        );
       } finally {
         testClient.release();
       }
@@ -130,7 +145,69 @@ export async function initDatabase(): Promise<void> {
       await testClient.query("SELECT 1");
       logger.info("Database connection successful");
     } catch (connError: any) {
-      throw new Error(`Database connection failed: ${connError.message}`);
+      const errorMessage = connError.message || String(connError);
+      const errorCode = connError.code;
+
+      logger.error("Database connection failed", {
+        message: errorMessage,
+        code: errorCode,
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+        databaseUrlMasked: process.env.DATABASE_URL
+          ? process.env.DATABASE_URL.replace(/:[^:@]+@/, ":****@")
+          : "not set",
+      });
+
+      // Provide more specific error messages
+      if (errorCode === "ECONNREFUSED") {
+        throw new Error(
+          `Cannot connect to database server. Please check:\n` +
+            `1. Database server is running and accessible\n` +
+            `2. DATABASE_URL host and port are correct\n` +
+            `3. If using a cloud database, ensure Vercel IPs are whitelisted\n` +
+            `4. Check firewall/network settings\n` +
+            `Error: ${errorMessage}`
+        );
+      } else if (
+        errorCode === "ETIMEDOUT" ||
+        errorMessage.includes("timeout")
+      ) {
+        throw new Error(
+          `Database connection timed out. Please check:\n` +
+            `1. Database server is accessible from Vercel's network\n` +
+            `2. Network connectivity and firewall rules\n` +
+            `3. Database server is not overloaded\n` +
+            `Error: ${errorMessage}`
+        );
+      } else if (
+        errorMessage.includes("password") ||
+        errorMessage.includes("authentication")
+      ) {
+        throw new Error(
+          `Database authentication failed. Please check:\n` +
+            `1. DATABASE_URL username and password are correct\n` +
+            `2. Database user has proper permissions\n` +
+            `Error: ${errorMessage}`
+        );
+      } else if (
+        errorMessage.includes("does not exist") ||
+        errorCode === "3D000"
+      ) {
+        throw new Error(
+          `Database does not exist. Please check:\n` +
+            `1. Database name in DATABASE_URL is correct\n` +
+            `2. Database has been created\n` +
+            `Error: ${errorMessage}`
+        );
+      } else {
+        throw new Error(
+          `Database connection failed: ${errorMessage}\n` +
+            `Error code: ${errorCode || "N/A"}\n` +
+            `Please verify:\n` +
+            `1. DATABASE_URL is set correctly in Vercel environment variables\n` +
+            `2. Database server is accessible\n` +
+            `3. Database credentials are correct`
+        );
+      }
     } finally {
       testClient.release();
     }
